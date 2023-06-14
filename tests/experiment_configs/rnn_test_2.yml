@@ -1,0 +1,43 @@
+name: rnn_test_2
+n_seg: 7
+
+# Dataset
+train_trajs:
+  - 19
+
+data_seed: 812
+batch_size: 64
+rollout_length: 250
+n_epochs: 2
+
+# Dynamics model
+model_seed: 42
+encoder:
+  type: PINN
+  width: 64
+  depth: 2
+  activation: tanh
+
+dynamics:
+  type: RNN
+  n_u: 18
+
+decoder:
+  type: FK
+  n_y: 6
+  width: 64
+  depth: 2
+  activation: tanh
+
+# Optimizer
+optimizer: adamw # rmsprop sgd
+learning_rate_scheduler: constant 
+transition_epochs: 1
+initial_learning_rate: 0.001
+final_learning_rate: 0.00001
+polynomial_power: 0.5
+weight_decay: 0.0001
+
+# Cost function weights
+q_rfem_l2: 0.0
+dq_rfem_l2: 0.0

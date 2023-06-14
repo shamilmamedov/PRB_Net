@@ -1,0 +1,15 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+FEIN/__pycache__
+FEIN/utils/__pycache__
+FEIN/rfem_kinematics/__pycache__
+
+# Weights and biases
+wandb
+wandb-debug.log
+
+# Unit test
+.pytest_cache/
+
+# Distribution / packaging
+*.egg-info/

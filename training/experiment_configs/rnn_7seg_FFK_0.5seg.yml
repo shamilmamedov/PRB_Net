@@ -1,0 +1,51 @@
+name: rnn_7seg_FFK_0.5reg
+n_seg: 7
+
+# Dynamics model
+model_seed: 42
+encoder:
+  type: PINN
+  width: 128
+  depth: 2
+  activation: tanh
+
+dynamics:
+  type: RNN
+  n_u: 18
+
+decoder:
+  type: FK
+  n_y: 6
+
+
+# Dataset
+train_trajs:
+  - 1
+  - 3
+  - 5
+  - 7
+  - 9
+  - 13
+  - 14
+  - 16
+  - 18
+  - 19
+
+data_seed: 812
+batch_size: 64
+rollout_length: 250
+n_epochs: 40
+
+
+# Optimizer
+optimizer: adamw
+learning_rate_scheduler: polynomial
+initial_learning_rate: 0.002
+final_learning_rate: 1.E-4
+transition_epochs: 25
+polynomial_power: 1.0
+weight_decay: 0.0001
+
+# Loss function
+q_rfem_l2: 0.5
+dq_rfem_l2: 0.05

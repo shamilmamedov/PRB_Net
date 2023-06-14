@@ -1,0 +1,89 @@
+name: rnn_sweep_7seg_LFK
+method: random
+description: 'Model with physics-informed NN encoder, RNN dynamics and Trainable FK decoder'
+metric:
+  goal: minimize
+  name: loss_test
+
+parameters:
+  n_seg: 
+    value: 7
+
+  # Dataset
+  train_trajs: 
+    value:
+      - 1
+      - 7
+      - 13
+      - 16
+      - 18
+      - 19
+
+  data_seed:
+    value: 812
+  batch_size:
+    value: 64
+  rollout_length:
+    value: 250
+  n_epochs:
+    value: 25
+  
+  # Dynamics
+  model_seed:
+    value: 42
+
+  encoder:
+    parameters:
+      type: 
+        value: PINN
+      width:
+        values:
+          - 64
+          - 128
+      depth:
+        values:
+          - 2
+          - 3
+      activation:
+        value: tanh
+
+  dynamics:
+    parameters:
+      type: 
+        value: RNN
+      n_u: 
+        value: 18
+
+  decoder:
+    parameters:
+      type: 
+        value: TrainableFKDecoder
+      n_y: 
+        value: 6
+
+  # Optimizer
+  optimizer: 
+    value: adamw
+  learning_rate_scheduler:
+    value: polynomial
+  initial_learning_rate:
+    values:
+      - 0.001
+      - 0.002
+      - 0.004
+  final_learning_rate:
+    value:  0.00001
+  polynomial_power:
+    values:
+      - 0.5
+      - 1.0
+      - 1.5
+  weight_decay:
+    values:
+      - 0.0001
+      - 0.001
+
+  q_rfem_l2:
+    value: 0.1
+  dq_rfem_l2:
+    value: 0.01

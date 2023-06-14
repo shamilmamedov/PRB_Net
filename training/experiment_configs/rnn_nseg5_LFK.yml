@@ -1,0 +1,45 @@
+name: rnn_nseg5_LFK
+n_seg: 5
+
+# Dynamics model
+model_seed: 42
+encoder:
+  type: PINN
+  width: 32
+  depth: 3
+  activation: tanh
+
+dynamics:
+  type: RNN
+  n_u: 18
+
+decoder:
+  type: TrainableFKDecoder
+  n_y: 6
+
+
+# Dataset
+train_trajs:
+  - 1
+  - 7
+  - 13
+  - 16
+  - 18
+  - 19
+
+data_seed: 812
+batch_size: 32
+rollout_length: 250
+n_epochs: 30
+
+# Optimizer
+optimizer: adamw
+learning_rate_scheduler: constant
+initial_learning_rate: 0.002
+final_learning_rate: 0.00001
+polynomial_power: 0.5
+weight_decay: 0.0001
+
+# Loss function
+q_rfem_l2: 0.1
+dq_rfem_l2: 0.01
