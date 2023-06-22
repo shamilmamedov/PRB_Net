@@ -4,7 +4,7 @@
 Our primary focus lies in modeling the highly nonlinear dynamics of deformable linear objects, including cables, ropes, and rods, based on limited observations. An illustrative example showcasing the typical motion patterns we seek to predict is presented below.
 
 <p align="center">
-  <img src=https://github.com/shamilmamedov/FEIN/assets/59015432/df538094-14b2-4cd0-b800-abbecb2f02f0 alt="Image" />
+  <img src=media/dlo-excitation.gif alt="Image" />
 </p>
 
 
@@ -14,7 +14,7 @@ The setup we used in this work to generate the dataset consists of: a 1.92 m lon
 - A latent dynamics model that maps the current state to the next one.
 - A decoder that maps latent states and external inputs into observations.
 
-![front page image v9-1](https://github.com/shamilmamedov/FEIN/assets/59015432/6350db74-2718-48da-9112-9b4047829203)
+![setup](media/setup.png)
 
 ## Proposed method
 Although purely machine learning (ML) methods can address the problem, they have a number of limitations. First, the latent state is often not interpretable and lacks physical meaning. Second, ML methods only predict the observations—the DLO's end position and velocity—without providing any information about the shape of the DLO. Rough shape reconstruction of the DLO is important for DLO manipulation in an environment with obstacles.
@@ -23,7 +23,7 @@ We propose approximating the DLO as a serial chain of rigid bodies connected via
 
 To further enhance the physical consistency of the DLO's shape, we apply regularization to the latent states. From a physical standpoint, this proposed regularization can be interpreted as minimizing kinetic and potential energy.
 
-![fein v2-1](https://github.com/shamilmamedov/FEIN/assets/59015432/8d06c274-0fe0-4dce-9ce6-3958286c7d40)
+![fein](media/FEIN_architecture.png)
 
 ## Running code
 To use the code, you first need to clone the repository and install FEIN by running `pip install -e .`
