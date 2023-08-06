@@ -1,12 +1,12 @@
-name: rnn_20seg_FFK_1reg
-n_seg: 20
+name: rnn_5seg_LFK
+n_seg: 5
 
 # Dynamics model
 model_seed: 42
 encoder:
   type: PINN
-  width: 128
-  depth: 2
+  width: 32
+  depth: 3
   activation: tanh
 
 dynamics:
@@ -14,7 +14,7 @@ dynamics:
   n_u: 18
 
 decoder:
-  type: FK
+  type: TrainableFKDecoder
   n_y: 6
 
 
@@ -31,18 +31,16 @@ train_trajs:
   - 19
 
 data_seed: 812
-batch_size: 64
+batch_size: 32
 rollout_length: 250
-n_epochs: 40
-
+n_epochs: 30
 
 # Optimizer
 optimizer: adamw
-learning_rate_scheduler: polynomial
+learning_rate_scheduler: constant
 initial_learning_rate: 0.002
-final_learning_rate: 1.E-4
-transition_epochs: 25
-polynomial_power: 1.0
+final_learning_rate: 0.00001
+polynomial_power: 0.5
 weight_decay: 0.0001
 
 # Loss function

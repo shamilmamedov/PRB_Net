@@ -1,12 +1,12 @@
-name: rnn_nseg10_LFK
-n_seg: 10
+name: rnn_20seg_LFK
+n_seg: 20
 
 # Dynamics model
 model_seed: 42
 encoder:
   type: PINN
-  width: 64
-  depth: 3
+  width: 128
+  depth: 2
   activation: tanh
 
 dynamics:
@@ -33,17 +33,18 @@ train_trajs:
 data_seed: 812
 batch_size: 64
 rollout_length: 250
-n_epochs: 30
+n_epochs: 40
 
 
 # Optimizer
 optimizer: adamw
 learning_rate_scheduler: polynomial
 initial_learning_rate: 0.002
-final_learning_rate: 0.00001
-polynomial_power: 1
+final_learning_rate: 1.E-4
+transition_epochs: 25
+polynomial_power: 1.0
 weight_decay: 0.0001
 
 # Loss function
 q_rfem_l2: 1.0
-dq_rfem_l2: 0.0
+dq_rfem_l2: 0.1

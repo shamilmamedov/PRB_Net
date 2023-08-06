@@ -185,13 +185,18 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
         try: 
             act_ = jnp.sum(model.decoder.rfem_lengths_sqrt**2) - model.decoder.rod_length
             length_ineq = jax.nn.relu(act_)
+
+            qb_offset_loss = (nn_utils.l2_loss(model.decoder.qb_offset[:3], alpha_p_b) + 
+                              nn_utils.l2_loss(model.decoder.qb_offset[3:], alpha_phi_b))
         except AttributeError:
             length_ineq = 0.
+            qb_offset_loss = 0.
 
         n_q = 2*model.n_seg
         q_rfem_loss_dyn = nn_utils.l2_loss(X_dyn[:,:,:n_q], alpha_q_rfem)
         dq_rfem_loss_dyn = nn_utils.l2_loss(X_dyn[:,:,n_q:], alpha_dq_rfem) 
-        loss = (output_prediction_loss_dyn + q_rfem_loss_dyn + dq_rfem_loss_dyn + length_ineq)
+        loss = (output_prediction_loss_dyn + q_rfem_loss_dyn + dq_rfem_loss_dyn + 
+                length_ineq + qb_offset_loss)
         return loss
     
 
@@ -259,6 +264,8 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
     # Parse loss weights
     alpha_q_rfem = config['q_rfem_l2']
     alpha_dq_rfem = config['dq_rfem_l2']
+    alpha_p_b = 1.
+    alpha_phi_b = 10.
     w_y = jnp.array([2., 2., 2., 1., 1., 1.])
     w_t = jnp.ones((rollout_length+1,1))
     w_t = w_t.at[jnp.array([0,1,2,3,4])].set(jnp.array([[5,4,3,2,1]]).T)

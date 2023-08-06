@@ -1,5 +1,5 @@
-name: rnn_7seg_FFK
-n_seg: 7
+name: rnn_50seg_LFK
+n_seg: 50
 
 # Dynamics model
 model_seed: 42
@@ -14,7 +14,7 @@ dynamics:
   n_u: 18
 
 decoder:
-  type: FK
+  type: TrainableFKDecoder
   n_y: 6
 
 
