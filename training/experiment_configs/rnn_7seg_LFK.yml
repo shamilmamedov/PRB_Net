@@ -20,12 +20,12 @@ decoder:
 
 # Dataset
 train_trajs:
-  - 2
+  - 1
   - 4
   - 6
   - 9
+  - 13
   - 14
-  - 15
   - 16
   - 18
   - 19
@@ -41,9 +41,10 @@ optimizer: adamw
 learning_rate_scheduler: polynomial
 initial_learning_rate: 0.002
 final_learning_rate: 0.00001
+transition_epochs: 25
 polynomial_power: 0.5
 weight_decay: 0.0001
 
 # Loss function
-q_rfem_l2: 0.1
-dq_rfem_l2: 0.01
+q_rfem_l2: 1.0
+dq_rfem_l2: 0.1

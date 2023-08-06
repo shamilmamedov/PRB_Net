@@ -174,7 +174,7 @@ def get_optimizer(configs, steps_per_epoch):
     return optim
 
 
-def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model: bool = False):
+def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model: bool = True):
     @eqx.filter_jit
     def compute_loss(model, U_enc, U_dyn, U_dec, Y):
         X_dyn, Y_pred_dyn = jax.vmap(model, in_axes=(0,0,0))(U_enc[:,0,:], U_dyn, U_dec)
@@ -264,8 +264,8 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
     # Parse loss weights
     alpha_q_rfem = config['q_rfem_l2']
     alpha_dq_rfem = config['dq_rfem_l2']
-    alpha_p_b = 1.
-    alpha_phi_b = 10.
+    alpha_p_b = 0.01
+    alpha_phi_b = 0.01
     w_y = jnp.array([2., 2., 2., 1., 1., 1.])
     w_t = jnp.ones((rollout_length+1,1))
     w_t = w_t.at[jnp.array([0,1,2,3,4])].set(jnp.array([[5,4,3,2,1]]).T)
@@ -341,7 +341,7 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
 
         if save_model and epoch % 5 == 0:
             try:
-                dir2save_ = 'examples/short_aluminium_rod/saved_models/'
+                dir2save_ = 'training/saved_models/'
                 path_ = dir2save_ + config['name'] + '.eqx'
                 eqx.tree_serialise_leaves(path_, model)
                 wandb.save(path_)
