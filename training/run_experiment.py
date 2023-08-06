@@ -180,23 +180,28 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
         X_dyn, Y_pred_dyn = jax.vmap(model, in_axes=(0,0,0))(U_enc[:,0,:], U_dyn, U_dec)
 
         Y_pred_dyn_scaled = output_scalar.vtransform(Y_pred_dyn)
-        output_prediction_loss_dyn = nn_utils.weighted_mse_loss(Y, Y_pred_dyn_scaled, w_y, w_t)
+        output_prediction_loss_dyn = nn_utils.weighted_mse_loss(
+            Y, Y_pred_dyn_scaled, w_y, w_t[:Y.shape[1],:]
+        )
         
         try: 
             act_ = jnp.sum(model.decoder.rfem_lengths_sqrt**2) - model.decoder.rod_length
-            length_ineq = jax.nn.relu(act_)
+            length_loss = nn_utils.l2_loss(act_, alpha_dlo_length)
+            delta_rfem_meshing = model.decoder.rfem_lengths_sqrt - rfem_meshing_sqrt
+            rfem_legth_loss = nn_utils.l2_loss(delta_rfem_meshing, alpha_rfem_length)
 
             qb_offset_loss = (nn_utils.l2_loss(model.decoder.qb_offset[:3], alpha_p_b) + 
                               nn_utils.l2_loss(model.decoder.qb_offset[3:], alpha_phi_b))
         except AttributeError:
-            length_ineq = 0.
+            length_loss = 0.
             qb_offset_loss = 0.
+            rfem_legth_loss = 0.
 
         n_q = 2*model.n_seg
         q_rfem_loss_dyn = nn_utils.l2_loss(X_dyn[:,:,:n_q], alpha_q_rfem)
         dq_rfem_loss_dyn = nn_utils.l2_loss(X_dyn[:,:,n_q:], alpha_dq_rfem) 
         loss = (output_prediction_loss_dyn + q_rfem_loss_dyn + dq_rfem_loss_dyn + 
-                length_ineq + qb_offset_loss)
+                length_loss + qb_offset_loss + rfem_legth_loss)
         return loss
     
 
@@ -266,9 +271,15 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
     alpha_dq_rfem = config['dq_rfem_l2']
     alpha_p_b = 0.01
     alpha_phi_b = 0.01
+    alpha_rfem_length = 0.01
+    alpha_dlo_length = 1.
     w_y = jnp.array([2., 2., 2., 1., 1., 1.])
     w_t = jnp.ones((rollout_length+1,1))
     w_t = w_t.at[jnp.array([0,1,2,3,4])].set(jnp.array([[5,4,3,2,1]]).T)
+    try:
+        rfem_meshing_sqrt = jnp.copy(model.decoder.rfem_lengths_sqrt)
+    except AttributeError:
+        pass
 
     # Train model
     print(f'Steps per epoch: {steps_per_epoch}')
@@ -278,7 +289,13 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
         W_hh_norm, W_ih_norm = [], []
         for step in range(steps_per_epoch): 
             U_enc, U_dyn, U_dec, Y = train_data_loader.get_batch(batch_size)
-            loss, grads, model, opt_state = make_step(model, U_enc, U_dyn, U_dec, Y, opt_state)
+            if epoch < 3:
+                l_ = int(0.1*rollout_length)
+                loss, grads, model, opt_state = make_step(
+                    model, U_enc[:,:l_,:], U_dyn[:,:l_-1,:], U_dec[:,:l_,:], Y[:,:l_,:], opt_state
+                )
+            else:
+                loss, grads, model, opt_state = make_step(model, U_enc, U_dyn, U_dec, Y, opt_state)
             epoch_train_loss.append(loss.item())
             lr_epoch.append(opt_state.hyperparams['learning_rate'].item())
             if config['dynamics']['type'] == 'RNN':

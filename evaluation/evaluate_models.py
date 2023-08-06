@@ -9,6 +9,14 @@ import pandas as pd
 import time
 
 
+from training import preprocess_data as data_pp
+from training.run_experiment import get_model
+import FEIN.utils.ode as ode_utils 
+import FEIN.utils.nn as nn_utils
+from FEIN.rfem_kinematics import models
+from FEIN.rfem_kinematics.visualization import visualize_robot
+
+
 def prediction_error_l2_norm(Y_true: jnp.ndarray, Y_pred: jnp.ndarray):
     E = Y_true - Y_pred
     return jnp.sqrt(jnp.sum(E**2, axis=1))
@@ -60,7 +68,7 @@ def get_models_configs(config_names: List[str]) -> List[dict]:
     # TODO check that all configs have the same train trajs
     # otherwise scaling the test trajs is not well defined
 
-    configs_dir = 'examples/short_aluminium_rod/experiment_configs/'
+    configs_dir = 'training/experiment_configs/'
     experiment_configs_paths = [configs_dir + name
                                for name in config_names]
     # Load config files
@@ -74,8 +82,8 @@ def get_models_configs(config_names: List[str]) -> List[dict]:
 def get_trained_models(configs: List[dict]) -> List:
     # Some useful function to work with NODE
     where = lambda x: x.dynamics.integrator.setting
-    new_intg_setting = IntegratorSetting(
-        dt=0.004, rtol=1e-6, atol=1e-8, method=IntegrationMethod.RK45
+    new_intg_setting = ode_utils.IntegratorSetting(
+        dt=0.004, rtol=1e-6, atol=1e-8, method=ode_utils.IntegrationMethod.RK45
     )
 
     # Load mode skeletons
@@ -85,7 +93,7 @@ def get_trained_models(configs: List[dict]) -> List:
 
     # Deserialoze saved trained models
     trained_models = []
-    models_dir = 'examples/short_aluminium_rod/saved_models/'
+    models_dir = 'training/saved_models/'
     for c, m in zip(configs, model_pytrees):
         model_path_ = models_dir + c['name'] + '.eqx'
         trained_m = eqx.tree_deserialise_leaves(model_path_, m)
@@ -116,7 +124,7 @@ def evaluate_models(models: List, data, output_scalar, batch_size: int = 256):
                     m,
                     output_scalar,
                     data.U_encoder[s_idx:e_idx,0,:],
-                    data.U_rnn[s_idx:e_idx],
+                    data.U_dyn[s_idx:e_idx],
                     data.U_decoder[s_idx:e_idx]
                 )
                 X_.append(X_mb)
@@ -128,7 +136,7 @@ def evaluate_models(models: List, data, output_scalar, batch_size: int = 256):
                 m,
                 output_scalar, 
                 data.U_encoder[:,0,:],
-                data.U_rnn,
+                data.U_dyn,
                 data.U_decoder
             )
             X_rnn.append(X_)
@@ -140,10 +148,10 @@ def compute_performance_metrics(Y, Y_pred_models):
     rmse, mae = [], []
     for Y_pred in Y_pred_models:
         rmse.append(
-            jnp.sqrt(mse_loss(Y, Y_pred)).item()
+            jnp.sqrt(nn_utils.mse_loss(Y, Y_pred)).item()
         )
         mae.append(
-            mae_loss(Y, Y_pred).item()
+            nn_utils.mae_loss(Y, Y_pred).item()
         )
     return rmse, mae
 
@@ -156,10 +164,10 @@ def get_data_used_for_training(config):
     val_size = 0.15
     rollout_length = config['rollout_length']
     data_key = jax.random.PRNGKey(config['data_seed'])
-    train_trajs = data_prpr.load_trajs(config['train_trajs'])
+    train_trajs = data_pp.load_trajs(config['train_trajs'])
 
     data_key, data_subkey = jax.random.split(data_key)
-    train_data, val_data = data_prpr.construct_train_val_datasets_from_trajs(
+    train_data, val_data = data_pp.construct_train_val_datasets_from_trajs(
         train_trajs, rollout_length, val_size, data_subkey
     )
     return train_data
@@ -177,8 +185,8 @@ def how_nseg_affects_predictions(save_fig: bool = False):
 
     rollout_length = configs[0]['rollout_length']
     n_test_trajs = [2, 15, 17]
-    test_trajs = data_prpr.load_trajs(n_test_trajs)
-    test_data = data_prpr.construct_test_dataset_from_trajs(
+    test_trajs = data_pp.load_trajs(n_test_trajs)
+    test_data = data_pp.construct_test_dataset_from_trajs(
         test_trajs, rollout_length, train_data, 'sliding', scale_outputs=True
     )
     output_scalar = test_data.output_scalar
@@ -221,8 +229,8 @@ def plot_hidden_rfem_state_evolution():
     train_data = get_data_used_for_training(configs[0])
     rollout_length = configs[0]['rollout_length']
     n_test_trajs = [17] # [15, 17]
-    test_trajs = data_prpr.load_trajs(n_test_trajs)
-    test_data = data_prpr.construct_test_dataset_from_trajs(
+    test_trajs = data_pp.load_trajs(n_test_trajs)
+    test_data = data_pp.construct_test_dataset_from_trajs(
         test_trajs, rollout_length, train_data, 'sliding', scale_outputs=True
     )
     output_scalar = test_data.output_scalar
@@ -276,21 +284,24 @@ def dlo_shape():
     pass
 
 
-def performance_on_different_rollout_lengths():
-    n_seg = 7
-    dyn = 'resnet'
-    config_names = [f'{dyn}_{n_seg}seg_NN.yml']#,
-                    #  f'{dyn}_{n_seg}seg_NN.yml'])
+def performance_on_different_rollout_lengths(
+        n_seg: int = 7,
+        dyn_model: str = 'rnn',
+        x_rollout: int = 1
+):
+    config_names = ([f'{dyn_model}_{n_seg}seg_NN.yml',
+                    f'{dyn_model}_{n_seg}seg_FFK.yml',
+                    f'{dyn_model}_{n_seg}seg_LFK.yml'])
     configs = get_models_configs(config_names)
     trained_models = get_trained_models(configs)
 
     # Load train and val data to get sacalars
     train_data = get_data_used_for_training(configs[0])
     train_rollout_length = configs[0]['rollout_length']
-    test_rollout_length = 10*train_rollout_length
+    test_rollout_length = x_rollout * train_rollout_length
     n_test_trajs = [2, 15, 17] # [15, 17]
-    test_trajs = data_prpr.load_trajs(n_test_trajs)
-    test_data = data_prpr.construct_test_dataset_from_trajs(
+    test_trajs = data_pp.load_trajs(n_test_trajs)
+    test_data = data_pp.construct_test_dataset_from_trajs(
         test_trajs, test_rollout_length, train_data, 'sliding', scale_outputs=True
     )
     output_scalar = test_data.output_scalar
@@ -320,8 +331,8 @@ def analyse_encoder():
     train_data = get_data_used_for_training(configs[0])
     rollout_length = configs[0]['rollout_length']
     n_test_trajs = [17] # [15, 17]
-    test_trajs = data_prpr.load_trajs(n_test_trajs)
-    test_data = data_prpr.construct_test_dataset_from_trajs(
+    test_trajs = data_pp.load_trajs(n_test_trajs)
+    test_data = data_pp.construct_test_dataset_from_trajs(
         test_trajs, rollout_length, train_data, 'sliding', scale_outputs=True
     )
     output_scalar = test_data.output_scalar
@@ -375,8 +386,8 @@ def visualize_rfem_motion():
     train_data = get_data_used_for_training(configs[0])
     rollout_length = configs[0]['rollout_length']
     n_test_trajs = [17]
-    test_trajs = data_prpr.load_trajs(n_test_trajs)
-    test_data = data_prpr.construct_test_dataset_from_trajs(
+    test_trajs = data_pp.load_trajs(n_test_trajs)
+    test_data = data_pp.construct_test_dataset_from_trajs(
         test_trajs, 5*rollout_length, train_data, 'sliding', scale_outputs=False
     )
 
@@ -410,8 +421,8 @@ def how_rfem_regularization_affects_dlo_shape():
     train_data = get_data_used_for_training(configs[0])
     rollout_length = configs[0]['rollout_length']
     n_test_trajs = [17]
-    test_trajs = data_prpr.load_trajs(n_test_trajs)
-    test_data = data_prpr.construct_test_dataset_from_trajs(
+    test_trajs = data_pp.load_trajs(n_test_trajs)
+    test_data = data_pp.construct_test_dataset_from_trajs(
         test_trajs, 1*rollout_length, train_data, 'sliding', scale_outputs=False
     )
 
@@ -443,8 +454,8 @@ def plot_output_prediction(save_fig: False):
     train_rollout_length = configs[0]['rollout_length']
     n_test_trajs = [17]
     test_rollout_length = 10*train_rollout_length
-    test_trajs = data_prpr.load_trajs(n_test_trajs)
-    test_data = data_prpr.construct_test_dataset_from_trajs(
+    test_trajs = data_pp.load_trajs(n_test_trajs)
+    test_data = data_pp.construct_test_dataset_from_trajs(
         test_trajs, test_rollout_length, train_data, 'sliding', scale_outputs=False
     )
 
@@ -509,8 +520,8 @@ def compute_inference_time():
     train_rollout_length = configs[0]['rollout_length']
     test_rollout_length = train_rollout_length
     n_test_trajs = [17]
-    test_trajs = data_prpr.load_trajs(n_test_trajs)
-    test_data = data_prpr.construct_test_dataset_from_trajs(
+    test_trajs = data_pp.load_trajs(n_test_trajs)
+    test_data = data_pp.construct_test_dataset_from_trajs(
         test_trajs, test_rollout_length, train_data, 'sliding', scale_outputs=False
     )
 
@@ -532,9 +543,9 @@ if __name__ == "__main__":
     # main()
     # how_nseg_affects_predictions(save_fig=True)
     # plot_hidden_rfem_state_evolution()
-    # performance_on_different_rollout_lengths()
+    performance_on_different_rollout_lengths()
     # analyse_encoder()
     # visualize_rfem_motion()
     # plot_output_prediction(save_fig=False)
     # how_rfem_regularization_affects_dlo_shape()
-    compute_inference_time()
+    # compute_inference_time()
