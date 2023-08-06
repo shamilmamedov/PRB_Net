@@ -66,7 +66,7 @@ def compute_marker_frames_parent_joints(rfe_lengths: List, p_markers: List):
     mparents = []
     for pk in p_markers:
         delta = pk - jpositions
-        parent = int(jnp.where(delta > 0, delta, jnp.inf).argmin())
+        parent = jnp.argmin(jnp.where(delta > 0, delta, jnp.inf))
         mparents.append(parent)
 
     # NOTE there is a base joint which is not considered while getting

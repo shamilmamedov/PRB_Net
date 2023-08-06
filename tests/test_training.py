@@ -11,7 +11,8 @@ import training.preprocess_data as data_prpr
 
 
 rnn_test_configs = ['tests/experiment_configs/rnn_test_1.yml',
-                    'tests/experiment_configs/rnn_test_2.yml']
+                    'tests/experiment_configs/rnn_test_2.yml',
+                    'tests/experiment_configs/rnn_test_3.yml']
 
 resnet_test_configs = ['tests/experiment_configs/resnet_test_1.yml',
                        'tests/experiment_configs/resnet_test_2.yml']
@@ -129,4 +130,4 @@ def test_node_training():
 
 
 if __name__ == "__main__":
-    pass
+    test_rnn_training()

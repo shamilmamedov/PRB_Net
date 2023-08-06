@@ -66,5 +66,6 @@ class DiscretizedNODE(eqx.Module):
         self.node = node
         self.integrator = integrator
 
+    @eqx.filter_jit  
     def __call__(self, x_0, U):
         return self.integrator(self.node, x_0, U)

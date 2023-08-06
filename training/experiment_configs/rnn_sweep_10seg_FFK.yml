@@ -12,13 +12,12 @@ parameters:
   # Dataset
   train_trajs: 
     value:
-      - 1
-      - 3
-      - 5
-      - 7
+      - 2
+      - 4
+      - 6
       - 9
-      - 13
       - 14
+      - 15
       - 16
       - 18
       - 19

@@ -1,4 +1,4 @@
-name: rnn_test_1
+name: rnn_test_3
 n_seg: 7
 
 # Dataset
@@ -12,7 +12,7 @@ rollout_length: 250
 # Dynamics model
 model_seed: 42
 encoder:
-  type: NN
+  type: PINN
   width: 64
   depth: 2
   activation: tanh
@@ -22,7 +22,7 @@ dynamics:
   n_u: 18
 
 decoder:
-  type: NN
+  type: TrainableFKDecoder
   n_y: 6
   width: 64
   depth: 2

@@ -34,7 +34,7 @@ class FKDecoder(eqx.Module):
         x_rnn = [q_rfem, dq_frem]
         u_dec = [q_b, dq_b]
         """
-        model = models.create_learnable_rfem_custom_model(self.rfem_params)
+        model = models.create_rfem_custom_model(self.rfem_params)
 
         q_rfem, dq_rfem = jnp.split(x_rnn, 2)
         q_b, dq_b = jnp.split(u_dec, 2)
@@ -51,11 +51,13 @@ class TrainableFKDecoder(eqx.Module):
     rfem_params: models.RFEMParameters
     rod_length: float
     rfem_lengths_sqrt: jnp.ndarray
+    qb_offset: jnp.ndarray
     
     def __init__(self, rfem_params: models.RFEMParameters) -> None:
         self.rod_length = float(sum(rfem_params.lengths))
         self.rfem_params = rfem_params
         self.rfem_lengths_sqrt = jnp.sqrt(rfem_params.lengths)
+        self.qb_offset = jnp.zeros((6,))
 
     @eqx.filter_jit
     def __call__(self, x_rnn, u_dec):
@@ -63,21 +65,33 @@ class TrainableFKDecoder(eqx.Module):
         x_rnn = [q_rfem, dq_frem]
         u_dec = [q_b, dq_b]
         """
-        # Get 
-        rfem_length = self.rfem_lengths_sqrt**2
-        L_ = sum(rfem_length)
-        scaling_ = self.rod_length / L_
-        self.rfem_params.lengths = rfem_length * scaling_
+        model = self._get_updated_model_description()
+        q, dq = self._xu_to_qdq(x_rnn, u_dec)
+        y = self._compute_observations(model, q, dq)
+        return y
+    
+    def _get_updated_model_description(self):
+        self._update_rfem_lengths()
+        return models.create_rfem_custom_model(self.rfem_params)
 
-        # model = models.create_rfem_custom_model(self.rfem_params)
-        model = models.create_learnable_rfem_custom_model(self.rfem_params)
+    def _update_rfem_lengths(self):
+        rfem_lengths = self.rfem_lengths_sqrt**2
+        L = jnp.sum(rfem_lengths)
+        scaling = self.rod_length / L
 
-        q_rfem, dq_rfem = jnp.split(x_rnn, 2)
-        q_b, dq_b = jnp.split(u_dec, 2)
+        self.rfem_params.lengths = scaling * rfem_lengths
+
+    @eqx.filter_jit
+    def _xu_to_qdq(self, x, u):
+        q_rfem, dq_rfem = jnp.split(x, 2)
+        q_b, dq_b = jnp.split(u, 2)
+        q_b = q_b + self.qb_offset
+
         q = jnp.concatenate((q_b, q_rfem))[:, jnp.newaxis]
         dq = jnp.concatenate((dq_b, dq_rfem))[:, jnp.newaxis]
-
+        return q, dq
+    
+    @eqx.filter_jit
+    def _compute_observations(self, model, q, dq):
         p_e, dp_e = algorithms.compute_markers_positions_and_velocities(model, q, dq)
-
-        y = jnp.hstack((p_e, dp_e)).ravel()
-        return y
+        return jnp.hstack((p_e, dp_e)).ravel()

@@ -14,22 +14,29 @@ def fwd_kinematics(model: RobotDescription, q: jnp.ndarray):
 
     :param model: model decription
     :param q: configuration of the robot
+
+    :return: a tupe of joint transformation and frame transformations
     """
+    # Get idxs of joints in q vector
     k = 0
     q_idxs = []
     for nq in model.jnqs:
         q_idxs.append(jnp.arange(k,k+nq))
         k += nq
 
-    o_T_j = dict() # dictionary of joint transformations
+    # Joint trasnformations
+    o_T_j = jnp.zeros((len(q_idxs), 4, 4))
     for k, qk_idxs in enumerate(q_idxs):
         Tjk, _, _ = jutils.jcalc_jax(model.jtypes[k], q[qk_idxs])
         Tk = lax.dot(model.jplacements[k]['T'], Tjk)
         if model.jparents[k] != -1:
-            o_T_j[k] = lax.dot(o_T_j[model.jparents[k]], Tk)
+            o_T_j = o_T_j.at[k].set(
+                lax.dot(o_T_j[model.jparents[k]], Tk)
+            )
         else:
-            o_T_j[k] = Tk
+            o_T_j = o_T_j.at[k].set(Tk)
 
+    # Frame transformations
     o_T_f = dict() # dictionary of frame transformations
     for k in range(model.n_frames):
         Tk = model.fplacements[k]['T']
@@ -39,6 +46,7 @@ def fwd_kinematics(model: RobotDescription, q: jnp.ndarray):
 
 
 def fwd_velocity_kinematics(model: RobotDescription, q: jnp.ndarray, dq: jnp.ndarray):
+    # Get idxs of joints in q vector
     k = 0
     q_idxs = []
     for nq in model.jnqs:
@@ -87,18 +95,19 @@ def fwd_velocity_kinematics(model: RobotDescription, q: jnp.ndarray, dq: jnp.nda
 
 
 def fwd_joint_position_and_velocity_kinematics(
-    model: RobotDescription, 
-    q: jnp.ndarray, 
-    dq: jnp.ndarray
-    ):
+        model: RobotDescription, 
+        q: jnp.ndarray, 
+        dq: jnp.ndarray
+):
+    # Get idxs of joints in q vector
     k = 0
     q_idxs = []
     for nq in model.jnqs:
         q_idxs.append(jnp.arange(k,k+nq))
         k += nq
 
-    Vj = []
-    o_T_j = dict() 
+    Vj = jnp.zeros((len(q_idxs), 6, 1))
+    o_T_j = jnp.zeros((len(q_idxs), 4, 4)) 
     Tj, S, dS = zip(*[jutils.jcalc_jax(jti, q[qi_idxs], dq[qi_idxs]) 
                       for jti, qi_idxs in zip(model.jtypes, q_idxs)])
     for i, qi_idxs in enumerate(q_idxs):
@@ -113,14 +122,18 @@ def fwd_joint_position_and_velocity_kinematics(
 
         # Describe i-th joint frame in 0-frame
         if model.jparents[i] != -1:
-            o_T_j[i] = lax.dot(o_T_j[model.jparents[i]], T_λi)
+            o_T_j = o_T_j.at[i].set(
+                lax.dot(o_T_j[model.jparents[i]], T_λi)
+            )
         else:
-            o_T_j[i] = T_λi
+            o_T_j = o_T_j.at[i].set(T_λi)
 
         Ad_T_iλ = jutils.Adjoint(jutils.TransInv(T_λi))
 
         # Velocity and acceleration of i-th body
-        Vj.append(lax.dot(Ad_T_iλ, V_λ) + lax.dot(S[i], dq[qi_idxs]))
+        Vj = Vj.at[i].set(
+            lax.dot(Ad_T_iλ, V_λ) + lax.dot(S[i], dq[qi_idxs])
+        )
     return o_T_j, Vj
 
 
@@ -130,21 +143,20 @@ def compute_markers_positions_and_velocities(model, q, dq):
     p_markers = []
     for k in range(model.n_frames):
         Tk = model.fplacements[k]['T']
-        o_T_f = o_T_j[model.fparents[k]] @ Tk
+        o_T_f = jnp.dot(o_T_j[model.fparents[k]], Tk)
         p_markers.append(jutils.Trans2Rp(o_T_f)[1].T)
 
-    Vf = dict()
     dp_markers = []
     for k in range(model.n_frames):
         V_parent_joint = Vj[model.fparents[k]]
         
         Tk = model.fplacements[k]['T']
-        Vf[k] = lax.dot(jutils.Adjoint(jutils.TransInv(Tk)), V_parent_joint)
+        Vf = lax.dot(jutils.Adjoint(jutils.TransInv(Tk)), V_parent_joint)
 
         o_T_f = jnp.dot(o_T_j[model.fparents[k]], Tk)
         o_R_f = jutils.Trans2Rp(o_T_f)[0]
 
-        o_Vf = lax.dot(jax.scipy.linalg.block_diag(o_R_f, o_R_f), Vf[k])
+        o_Vf = lax.dot(jax.scipy.linalg.block_diag(o_R_f, o_R_f), Vf)
         dp_markers.append(o_Vf[3:,:].T)
     return jnp.vstack(p_markers), jnp.vstack(dp_markers)
 
