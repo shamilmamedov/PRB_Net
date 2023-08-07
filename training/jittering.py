@@ -6,10 +6,10 @@ import jax.numpy as jnp
 @dataclass
 class DynamicsInputNoiseParameters:
     sigma_phi: float = 0.0125
-    sigma_dpb: float = 0.025
-    sigma_dphi: float = 0.025
-    sigma_ddpb: float = 0.05
-    sigma_ddphi: float = 0.05
+    sigma_dpb: float = 0.0125
+    sigma_dphi: float = 0.0125
+    sigma_ddpb: float = 0.0125
+    sigma_ddphi: float = 0.0125
 
 
 def generate_gaussian_noise(

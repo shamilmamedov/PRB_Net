@@ -259,7 +259,6 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
         train_data.Y,
         data_key   
     )
-    dyn_noise_params = jittering.DynamicsInputNoiseParameters()
 
     # Get model
     model = get_model(config)
@@ -279,7 +278,7 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
     alpha_phi_b = 0.01
     alpha_rfem_length = 0.01
     alpha_dlo_length = 1.
-    alpha_p_marker = 0.5
+    alpha_p_marker = 0.1
     w_y = jnp.array([2., 2., 2., 1., 1., 1.])
     w_t = jnp.ones((rollout_length+1,1))
     w_t = w_t.at[jnp.array([0,1,2,3,4])].set(jnp.array([[5,4,3,2,1]]).T)
@@ -298,14 +297,7 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
         for step in range(steps_per_epoch): 
             # Get current batch
             U_enc, U_dyn, U_dec, Y = train_data_loader.get_batch(batch_size)
-
-            # Generate noise for robustness
-            noise_key, noise_subkey = jax.random.split(noise_key)
-            U_dyn_noise = jittering.generate_dynamics_input_noise(
-                dyn_noise_params, batch_size, rollout_length, key=noise_subkey
-            )
-            U_dyn = U_dyn + train_data.dyn_scalar.vtransform(U_dyn_noise)
-            if epoch < 5:
+            if epoch < 12:
                 l_ = int(0.1*rollout_length)
                 loss, grads, model, opt_state = make_step(
                     model, U_enc[:,:l_,:], U_dyn[:,:l_-1,:], U_dec[:,:l_,:], Y[:,:l_,:], opt_state
