@@ -132,5 +132,4 @@ def test_node_training():
 
 
 if __name__ == "__main__":
-    test_rnn_model_computation()
     test_rnn_training()

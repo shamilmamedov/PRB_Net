@@ -16,6 +16,7 @@ import FEIN.utils.data as data_utils
 import FEIN.utils.kinematics as kin_utils
 import FEIN.rfem_kinematics.models as rfem_models
 import training.preprocess_data as data_prpr
+from training import jittering
 
 
 class DLOModel(eqx.Module):
@@ -250,6 +251,7 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
     )
     output_scalar = train_data.output_scalar
 
+    noise_key, data_key = jax.random.split(data_key)
     train_data_loader = data_utils.DLODataLoader(
         train_data.U_encoder,
         train_data.U_dyn,
@@ -257,7 +259,7 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
         train_data.Y,
         data_key   
     )
-
+    dyn_noise_params = jittering.DynamicsInputNoiseParameters()
 
     # Get model
     model = get_model(config)
@@ -294,7 +296,15 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
         epoch_train_loss = []
         W_hh_norm, W_ih_norm = [], []
         for step in range(steps_per_epoch): 
+            # Get current batch
             U_enc, U_dyn, U_dec, Y = train_data_loader.get_batch(batch_size)
+
+            # Generate noise for robustness
+            noise_key, noise_subkey = jax.random.split(noise_key)
+            U_dyn_noise = jittering.generate_dynamics_input_noise(
+                dyn_noise_params, batch_size, rollout_length, key=noise_subkey
+            )
+            U_dyn = U_dyn + train_data.dyn_scalar.vtransform(U_dyn_noise)
             if epoch < 5:
                 l_ = int(0.1*rollout_length)
                 loss, grads, model, opt_state = make_step(
