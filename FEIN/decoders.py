@@ -52,12 +52,14 @@ class TrainableFKDecoder(eqx.Module):
     rod_length: float
     rfem_lengths_sqrt: jnp.ndarray
     qb_offset: jnp.ndarray
+    p_marker: jnp.ndarray
     
     def __init__(self, rfem_params: models.RFEMParameters) -> None:
         self.rod_length = float(sum(rfem_params.lengths))
         self.rfem_params = rfem_params
         self.rfem_lengths_sqrt = jnp.sqrt(rfem_params.lengths)
         self.qb_offset = jnp.zeros((6,))
+        self.p_marker = jnp.array(jnp.copy(rfem_params.marker_positions[0]))
 
     @eqx.filter_jit
     def __call__(self, x_rnn, u_dec):
@@ -72,6 +74,7 @@ class TrainableFKDecoder(eqx.Module):
     
     def _get_updated_model_description(self):
         self._update_rfem_lengths()
+        self._update_marker_position()
         return models.create_rfem_custom_model(self.rfem_params)
 
     def _update_rfem_lengths(self):
@@ -80,6 +83,9 @@ class TrainableFKDecoder(eqx.Module):
         scaling = self.rod_length / L
 
         self.rfem_params.lengths = scaling * rfem_lengths
+
+    def _update_marker_position(self):
+        self.rfem_params.set_marker_positions([self.p_marker])
 
     @eqx.filter_jit
     def _xu_to_qdq(self, x, u):

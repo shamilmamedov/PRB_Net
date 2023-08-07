@@ -190,18 +190,22 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
             delta_rfem_meshing = model.decoder.rfem_lengths_sqrt - rfem_meshing_sqrt
             rfem_legth_loss = nn_utils.l2_loss(delta_rfem_meshing, alpha_rfem_length)
 
+            delta_marker_pos = p_marker_calibration - model.decoder.p_marker
+            marker_pos_loss = nn_utils.l2_loss(delta_marker_pos, alpha_p_marker)
+
             qb_offset_loss = (nn_utils.l2_loss(model.decoder.qb_offset[:3], alpha_p_b) + 
                               nn_utils.l2_loss(model.decoder.qb_offset[3:], alpha_phi_b))
         except AttributeError:
             length_loss = 0.
             qb_offset_loss = 0.
             rfem_legth_loss = 0.
+            marker_pos_loss = 0.
 
         n_q = 2*model.n_seg
         q_rfem_loss_dyn = nn_utils.l2_loss(X_dyn[:,:,:n_q], alpha_q_rfem)
         dq_rfem_loss_dyn = nn_utils.l2_loss(X_dyn[:,:,n_q:], alpha_dq_rfem) 
         loss = (output_prediction_loss_dyn + q_rfem_loss_dyn + dq_rfem_loss_dyn + 
-                length_loss + qb_offset_loss + rfem_legth_loss)
+                length_loss + qb_offset_loss + rfem_legth_loss + marker_pos_loss)
         return loss
     
 
@@ -273,11 +277,13 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
     alpha_phi_b = 0.01
     alpha_rfem_length = 0.01
     alpha_dlo_length = 1.
+    alpha_p_marker = 0.5
     w_y = jnp.array([2., 2., 2., 1., 1., 1.])
     w_t = jnp.ones((rollout_length+1,1))
     w_t = w_t.at[jnp.array([0,1,2,3,4])].set(jnp.array([[5,4,3,2,1]]).T)
     try:
         rfem_meshing_sqrt = jnp.copy(model.decoder.rfem_lengths_sqrt)
+        p_marker_calibration = jnp.copy(model.decoder.p_marker)
     except AttributeError:
         pass
 

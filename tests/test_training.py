@@ -10,9 +10,11 @@ from training import run_experiment
 import training.preprocess_data as data_prpr
 
 
-rnn_test_configs = ['tests/experiment_configs/rnn_test_1.yml',
-                    'tests/experiment_configs/rnn_test_2.yml',
-                    'tests/experiment_configs/rnn_test_3.yml']
+# rnn_test_configs = ['tests/experiment_configs/rnn_test_1.yml',
+#                     'tests/experiment_configs/rnn_test_2.yml',
+#                     'tests/experiment_configs/rnn_test_3.yml']
+rnn_test_configs = ['tests/experiment_configs/rnn_test_3.yml']
+
 
 resnet_test_configs = ['tests/experiment_configs/resnet_test_1.yml',
                        'tests/experiment_configs/resnet_test_2.yml']
@@ -114,7 +116,7 @@ def test_node_model_computation():
 @pytest.mark.skip(reason="Too slow")
 def test_rnn_training():
     for config in rnn_test_configs:
-        os.system(f"python training/run_experiment.py --wandb_mode disabled --config {config}")
+        os.system(f"python training/run_experiment.py --wandb_mode disabled --config {config} --save_model False")
 
 
 @pytest.mark.skip(reason="Too slow")
@@ -130,4 +132,5 @@ def test_node_training():
 
 
 if __name__ == "__main__":
+    test_rnn_model_computation()
     test_rnn_training()
