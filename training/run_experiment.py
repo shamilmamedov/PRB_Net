@@ -389,8 +389,4 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
 
 
 if __name__ == '__main__': 
-    # fire.Fire(main)
-    config = 'tests/experiment_configs/rnn_test_3.yml'
-    wandb_mode = 'disabled'
-    save_model = False
-    main(config, wandb_mode, save_model)
+    fire.Fire(main)

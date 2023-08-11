@@ -36,6 +36,14 @@ batch_size: 64
 rollout_length: 250
 n_epochs: 25
 
+# Rollout legnth scheduler
+rollout_length_scheduler:
+  init_value: 0.1
+  boundaries:
+    - 12
+  scales:
+    - 10
+
 # Optimizer
 optimizer: adamw
 learning_rate_scheduler: polynomial
