@@ -9,6 +9,14 @@ data_seed: 812
 batch_size: 64
 rollout_length: 250
 
+# Rollout legnth scheduler
+rollout_length_scheduler:
+  init_value: 0.1
+  boundaries:
+    - 12
+  scales:
+    - 10
+
 # Dynamics model
 model_seed: 42
 encoder:

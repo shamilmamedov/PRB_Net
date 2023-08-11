@@ -23,12 +23,12 @@ decoder:
 
 # Dataset
 train_trajs:
-  - 2
+  - 1
   - 4
   - 6
   - 9
+  - 13
   - 14
-  - 15
   - 16
   - 18
   - 19

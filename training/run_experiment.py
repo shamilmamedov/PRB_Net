@@ -175,6 +175,17 @@ def get_optimizer(configs, steps_per_epoch):
     return optim
 
 
+def get_rollout_length_scheduler(config):
+    init_value = config['init_value']
+    boundaries = config['boundaries']
+    scales = config['scales']
+    boundaries_and_scales = dict(zip(boundaries, scales))
+    return optax.piecewise_constant_schedule(
+                init_value,
+                boundaries_and_scales
+            )
+
+
 def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model: bool = True):
     @eqx.filter_jit
     def compute_loss(model, U_enc, U_dyn, U_dec, Y):
@@ -259,6 +270,9 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
         train_data.Y,
         data_key   
     )
+    rollout_length_scheduler = get_rollout_length_scheduler(
+        config['rollout_length_scheduler']
+    )
 
     # Get model
     model = get_model(config)
@@ -271,11 +285,12 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
     opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
 
 
+
     # Parse loss weights
     alpha_q_rfem = config['q_rfem_l2']
     alpha_dq_rfem = config['dq_rfem_l2']
-    alpha_p_b = 0.01
-    alpha_phi_b = 0.01
+    alpha_p_b = 0.1
+    alpha_phi_b = 0.1
     alpha_rfem_length = 0.01
     alpha_dlo_length = 1.
     alpha_p_marker = 0.1
@@ -297,13 +312,10 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
         for step in range(steps_per_epoch): 
             # Get current batch
             U_enc, U_dyn, U_dec, Y = train_data_loader.get_batch(batch_size)
-            if epoch < 12:
-                l_ = int(0.1*rollout_length)
-                loss, grads, model, opt_state = make_step(
-                    model, U_enc[:,:l_,:], U_dyn[:,:l_-1,:], U_dec[:,:l_,:], Y[:,:l_,:], opt_state
-                )
-            else:
-                loss, grads, model, opt_state = make_step(model, U_enc, U_dyn, U_dec, Y, opt_state)
+            l_ = int(rollout_length*rollout_length_scheduler(epoch))
+            loss, grads, model, opt_state = make_step(
+                model, U_enc[:,:l_,:], U_dyn[:,:l_-1,:], U_dec[:,:l_,:], Y[:,:l_,:], opt_state
+            )
             epoch_train_loss.append(loss.item())
             lr_epoch.append(opt_state.hyperparams['learning_rate'].item())
             if config['dynamics']['type'] == 'RNN':
@@ -377,4 +389,8 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
 
 
 if __name__ == '__main__': 
-    fire.Fire(main)
+    # fire.Fire(main)
+    config = 'tests/experiment_configs/rnn_test_3.yml'
+    wandb_mode = 'disabled'
+    save_model = False
+    main(config, wandb_mode, save_model)

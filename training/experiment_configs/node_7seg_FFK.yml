@@ -3,12 +3,12 @@ n_seg: 7
 
 # Dataset
 train_trajs:
-  - 2
+  - 1
   - 4
   - 6
   - 9
+  - 13
   - 14
-  - 15
   - 16
   - 18
   - 19
@@ -54,5 +54,5 @@ polynomial_power: 0.5
 weight_decay: 0.01
 
 # Cost function weights
-q_rfem_l2: 0.5
-dq_rfem_l2: 0.05
+q_rfem_l2: 1.0
+dq_rfem_l2: 0.1

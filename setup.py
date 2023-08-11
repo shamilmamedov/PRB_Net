@@ -12,4 +12,5 @@ setup(
     author=AUTHORS,
     author_email=MAINTAINER_EMAIL,
     packages=find_packages()
+    # packages=['training', 'FEIN']
 )
