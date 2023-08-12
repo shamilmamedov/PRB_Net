@@ -33,7 +33,7 @@ train_trajs:
 data_seed: 812
 batch_size: 32
 rollout_length: 250
-n_epochs: 30
+n_epochs: 25
 
 # Rollout legnth scheduler
 rollout_length_scheduler:
@@ -48,6 +48,7 @@ optimizer: adamw
 learning_rate_scheduler: constant
 initial_learning_rate: 0.002
 final_learning_rate: 0.00001
+transition_epochs: 25
 polynomial_power: 0.5
 weight_decay: 0.0001
 

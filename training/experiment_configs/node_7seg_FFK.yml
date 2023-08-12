@@ -16,13 +16,13 @@ train_trajs:
 data_seed: 812
 batch_size: 64
 rollout_length: 250
-n_epochs: 25
+n_epochs: 15
 
 # Rollout legnth scheduler
 rollout_length_scheduler:
   init_value: 0.1
   boundaries:
-    - 12
+    - 5
   scales:
     - 10
 

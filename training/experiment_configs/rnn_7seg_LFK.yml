@@ -39,9 +39,11 @@ n_epochs: 25
 rollout_length_scheduler:
   init_value: 0.1
   boundaries:
-    - 12
+    - 5
+    - 15
   scales:
-    - 10
+    - 2
+    - 5
 
 # Optimizer
 optimizer: adamw

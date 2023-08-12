@@ -40,7 +40,7 @@ n_epochs: 40
 rollout_length_scheduler:
   init_value: 0.1
   boundaries:
-    - 12
+    - 10
   scales:
     - 10
 
