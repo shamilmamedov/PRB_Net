@@ -1,5 +1,6 @@
 name: rnn_7seg_NN
 n_seg: 7
+DLO: aluminium-rod
 
 # Dynamics model
 model_seed: 42

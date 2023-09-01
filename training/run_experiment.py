@@ -7,7 +7,8 @@ import wandb
 import yaml
 from typing import Union, List
 import fire
-
+import os
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "False"
 
 from FEIN import rnn, resnet, neural_ode, encoders, decoders
 import FEIN.utils.nn as nn_utils
