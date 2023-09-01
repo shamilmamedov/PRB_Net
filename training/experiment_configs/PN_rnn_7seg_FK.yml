@@ -1,0 +1,60 @@
+name: PN_rnn_7seg_FK
+n_seg: 7
+DLO: pool-noodle
+
+# Dynamics model
+model_seed: 42
+encoder:
+  type: PINN
+  width: 128
+  depth: 2
+  activation: tanh
+
+dynamics:
+  type: RNN
+  n_u: 18
+
+decoder:
+  type: FK
+  n_y: 6
+
+# Dataset
+train_trajs:
+  - 1
+  - 3
+  - 5
+  - 6
+  - 7
+  - 8
+val_trajs: 
+  - 4
+test_trajs: 
+  - 2
+
+data_seed: 812
+batch_size: 64
+rollout_length: 250
+n_epochs: 25
+
+# Rollout legnth scheduler
+# rollout_length_scheduler:
+#   init_value: 0.1
+#   boundaries:
+#     - 4
+#     - 12
+#   scales:
+#     - 5
+#     - 2
+
+# Optimizer
+optimizer: adamw # rmsprop sgd
+learning_rate_scheduler: polynomial 
+initial_learning_rate: 1.E-3
+transition_epochs: 25
+final_learning_rate: 1.E-4
+polynomial_power: 0
+weight_decay: 1.E-4
+
+# Cost function weights
+q_rfem_l2: 0.0
+dq_rfem_l2: 0.0
