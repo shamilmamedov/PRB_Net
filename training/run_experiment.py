@@ -98,7 +98,7 @@ def get_dynamics(dyn_configs, n_seg, key):
             return neural_ode.DiscretizedNODE(node_, integrator_)
 
 
-def get_decoder(dec_configs, n_seg, key):
+def get_decoder(dec_configs, dlo, n_seg, key):
     """ Supported decoders are NN, FK and Trainable FK
     """
     if dec_configs['type'] == 'NN':
@@ -111,8 +111,14 @@ def get_decoder(dec_configs, n_seg, key):
         )
         return decoders.NNDecoder(n_seg, dec_params, key=key)
     else:
-        marker_pos_path = 'FEIN/rfem_kinematics/configs/alrod-vicon-marker-locations.yaml'
-        dlo_phys_params_path = 'FEIN/rfem_kinematics/configs/alrod-physical-params.yaml'
+        configs_dir = 'FEIN/rfem_kinematics/configs/'
+        if dlo == 'aluminium-rod':
+            marker_pos_path = configs_dir + 'alrod-vicon-marker-locations.yaml'
+            dlo_phys_params_path = configs_dir + 'alrod-physical-params.yaml'
+        elif dlo == 'pool-noodle':
+            marker_pos_path = configs_dir + 'pool-noodle-vicon-marker-locations.yaml'
+            dlo_phys_params_path = configs_dir + 'pool-noodle-physical-params.yaml'
+            
         bjoint = kin_utils.JointType.FREE
         dlo_params = rfem_models.load_dlo_params_from_yaml(dlo_phys_params_path)
         p_markers = data_utils.load_vicon_marker_locations(marker_pos_path)
@@ -124,6 +130,7 @@ def get_decoder(dec_configs, n_seg, key):
 
 
 def get_model(configs):
+    dlo = configs['DLO']
     n_seg = configs['n_seg']
     model_key = jax.random.PRNGKey(configs['model_seed'])
     enc_key, dyn_key, dec_key = jrandom.split(model_key, 3)
@@ -131,7 +138,7 @@ def get_model(configs):
     # Parse, Create and instantiate an encoder
     encoder = get_encoder(configs['encoder'], n_seg, enc_key)
     dynamics = get_dynamics(configs['dynamics'], n_seg, dyn_key)
-    decoder = get_decoder(configs['decoder'], n_seg, dec_key)
+    decoder = get_decoder(configs['decoder'], dlo, n_seg, dec_key)
     return DLOModel(n_seg, encoder, dynamics, decoder)
 
     
@@ -176,14 +183,37 @@ def get_optimizer(configs, steps_per_epoch):
 
 
 def get_rollout_length_scheduler(config):
-    init_value = config['init_value']
-    boundaries = config['boundaries']
-    scales = config['scales']
-    boundaries_and_scales = dict(zip(boundaries, scales))
-    return optax.piecewise_constant_schedule(
-                init_value,
-                boundaries_and_scales
-            )
+    try:
+        c_scheduler = config['rollout_length_scheduler']
+        init_value = c_scheduler['init_value']
+        boundaries = c_scheduler['boundaries']
+        scales = c_scheduler['scales']
+        boundaries_and_scales = dict(zip(boundaries, scales))
+        return optax.piecewise_constant_schedule(
+                    init_value,
+                    boundaries_and_scales
+                )
+    except KeyError:
+        return optax.constant_schedule(1.)
+
+
+def get_data(config, key):
+    rollout_length = config['rollout_length']
+
+    if config['DLO'] == 'aluminium-rod':
+        val_size = 0.15
+        trajs = data_prpr.load_trajs(config['train_trajs'])
+        train_trajs, val_trajs = data_prpr.split_trajs_into_train_val(trajs, val_size, key)
+    elif config['DLO'] == 'pool-noodle':
+        train_trajs = data_prpr.load_trajs(config['train_trajs'])
+        val_trajs = data_prpr.load_trajs(config['val_trajs'])
+    else:
+        raise ValueError('Please specify a valid DLO in the config file')
+
+    train_data, val_data = data_prpr.construct_train_val_datasets(
+        train_trajs, val_trajs, rollout_length
+    )
+    return train_data, val_data
 
 
 def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model: bool = True):
@@ -248,21 +278,15 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
         print(config['name'])
 
 
-    # Get data and trajectory
+    # Get data
     batch_size = config['batch_size']
     rollout_length = config['rollout_length']
     data_key = jax.random.PRNGKey(config['data_seed']) 
-    
-    # Load training and validation data
-    val_size = 0.15
+
     data_key, data_subkey = jax.random.split(data_key)
-    train_trajs = data_prpr.load_trajs(config['train_trajs'])
-    train_data, val_data = data_prpr.construct_train_val_datasets_from_trajs(
-        train_trajs, rollout_length, val_size, data_subkey
-    )
+    train_data, val_data = get_data(config, data_subkey)
     output_scalar = train_data.output_scalar
 
-    noise_key, data_key = jax.random.split(data_key)
     train_data_loader = data_utils.DLODataLoader(
         train_data.U_encoder,
         train_data.U_dyn,
@@ -270,9 +294,7 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
         train_data.Y,
         data_key   
     )
-    rollout_length_scheduler = get_rollout_length_scheduler(
-        config['rollout_length_scheduler']
-    )
+    rollout_length_scheduler = get_rollout_length_scheduler(config)
 
     # Get model
     model = get_model(config)
@@ -283,7 +305,6 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
     steps_per_epoch = int(len(train_data_loader)/batch_size)
     optim = get_optimizer(config, steps_per_epoch)
     opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
-
 
 
     # Parse loss weights

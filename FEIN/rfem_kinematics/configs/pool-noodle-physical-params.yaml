@@ -1,0 +1,8 @@
+length: 1.895
+diameter_inner: 0.004
+diameter_outer: 0.006
+density: 2710
+youngs_modulus: 7.0e+10
+shear_modulus: 2.7e+10
+normal_damping_coef: 1.0e+9
+tangential_damping_coef: 1.0e+9

@@ -3,11 +3,10 @@ from scipy.fft import fft, fftfreq
 import matplotlib.pyplot as plt
 
 from FEIN.utils.data import load_trajs
-import data_preprocessing as data_pp
 
 
-def main(n_trajs):
-    trajs = load_trajs(n_trajs)
+def main(n_trajs, dlo: str = 'aluminium-rod'):
+    trajs = load_trajs(n_trajs, dlo)
     # traj.plot('p_e')
 
     dt = 0.004
@@ -34,5 +33,7 @@ def main(n_trajs):
 
 
 if __name__ == '__main__':
-    n_trajs = [2,4,6,14,16,19]
+    dlo = 'pool-noodle'
+    # n_trajs = [2,4,6,14,16,19]
+    n_trajs = [k for k in range(1,9)]
     main(n_trajs)

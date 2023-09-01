@@ -226,12 +226,14 @@ def slice_trajs(trajs, idxs):
     return list(itertools.chain.from_iterable(s_trajs))
 
 
-def construct_train_val_datasets_from_trajs(trajs, rollout_length: int, val_size: float, key):
-    # Split into train val trajs
+def split_trajs_into_train_val(trajs, val_size: float, key: jax.random.PRNGKey):
     train_idxs, val_idxs = get_train_val_idxs(trajs, val_size, key)
     train_trajs = slice_trajs(trajs, train_idxs)
     val_trajs = slice_trajs(trajs, val_idxs)
+    return train_trajs, val_trajs
 
+
+def construct_train_val_datasets(train_trajs, val_trajs, rollout_length: int):
     # Encoder dataset
     enc_trajs_train = construct_PIencoder_inputs(train_trajs)
     enc_trajs_val = construct_PIencoder_inputs(val_trajs)

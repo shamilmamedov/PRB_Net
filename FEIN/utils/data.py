@@ -148,16 +148,15 @@ def load_vicon_marker_locations(path_to_yaml: str):
     return marker_dist
 
 
-def load_trajs(n_trajs: list):
-    dataset_path = 'dataset/'
+def load_trajs(n_trajs: list, dlo: str = 'aluminium-rod'):
+    if dlo not in ['aluminium-rod', 'pool-noodle']:
+        raise ValueError('Please provide a valid DLO name')
+    dataset_path = f'dataset/{dlo}/'
     
     trajfile_names = [f'traj{n}.csv' for n in n_trajs]
     trajfile_paths = [dataset_path + t for t in trajfile_names]
     trajs = [DLOTrajectory(t, n) for t, n in zip(trajfile_paths, n_trajs)]
     return trajs
-
-
-
 
 
 def plot_trajs(T, Y, lbls: list):
@@ -177,3 +176,5 @@ def plot_trajs(T, Y, lbls: list):
             ax.grid(alpha=0.25)
     plt.tight_layout()
     plt.show()
+
+

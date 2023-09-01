@@ -1,22 +1,18 @@
-name: rnn_test_3
+name: rnn_test_5
 n_seg: 7
-DLO: aluminium-rod
+DLO: pool-noodle
 
 # Dataset
-train_trajs:
-  - 19
+train_trajs: 
+  - 8
+val_trajs: 
+  - 4
+test_trajs: 
+  - 2
 
 data_seed: 812
 batch_size: 64
 rollout_length: 250
-
-# Rollout legnth scheduler
-rollout_length_scheduler:
-  init_value: 0.1
-  boundaries:
-    - 12
-  scales:
-    - 10
 
 # Dynamics model
 model_seed: 42
@@ -31,7 +27,7 @@ dynamics:
   n_u: 18
 
 decoder:
-  type: TrainableFKDecoder
+  type: FK
   n_y: 6
   width: 64
   depth: 2
@@ -40,7 +36,7 @@ decoder:
 # Optimizer
 optimizer: adamw # rmsprop sgd
 learning_rate_scheduler: constant 
-n_epochs: 2
+n_epochs: 3
 transition_epochs: 1
 initial_learning_rate: 0.001
 final_learning_rate: 0.00001

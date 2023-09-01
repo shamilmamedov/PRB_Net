@@ -1,9 +1,14 @@
 name: rnn_test_1
 n_seg: 7
+DLO: aluminium-rod
 
 # Dataset
-train_trajs:
+train_trajs: 
   - 19
+val_trajs: 
+  - 4
+test_trajs: 
+  - 2
 
 data_seed: 812
 batch_size: 64
