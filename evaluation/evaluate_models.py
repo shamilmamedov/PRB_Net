@@ -11,7 +11,6 @@ import time
 
 from training import preprocess_data as data_pp
 from training.run_experiment import get_model
-import FEIN.utils.ode as ode_utils 
 import FEIN.utils.nn as nn_utils
 from FEIN.rfem_kinematics import models
 from FEIN.rfem_kinematics.visualization import visualize_robot
@@ -80,12 +79,6 @@ def get_models_configs(config_names: List[str]) -> List[dict]:
 
 
 def get_trained_models(configs: List[dict]) -> List:
-    # Some useful function to work with NODE
-    where = lambda x: x.dynamics.integrator.setting
-    new_intg_setting = ode_utils.IntegratorSetting(
-        dt=0.004, rtol=1e-6, atol=1e-8, method=ode_utils.IntegrationMethod.RK45
-    )
-
     # Load mode skeletons
     model_pytrees = []
     for c in configs:
@@ -97,7 +90,6 @@ def get_trained_models(configs: List[dict]) -> List:
     for c, m in zip(configs, model_pytrees):
         model_path_ = models_dir + c['name'] + '.eqx'
         trained_m = eqx.tree_deserialise_leaves(model_path_, m)
-        # trained_m = eqx.tree_at(where, trained_m, new_intg_setting)
         trained_models.append(trained_m)
 
     return trained_models
@@ -156,19 +148,23 @@ def compute_performance_metrics(Y, Y_pred_models):
     return rmse, mae
 
 
-def sanity_check_rollout_lengths(configs, rollout_length):
-    pass
-
-
 def get_data_used_for_training(config):
-    val_size = 0.15
     rollout_length = config['rollout_length']
     data_key = jax.random.PRNGKey(config['data_seed'])
-    train_trajs = data_pp.load_trajs(config['train_trajs'])
+    data_key, key = jax.random.split(data_key)
 
-    data_key, data_subkey = jax.random.split(data_key)
-    train_data, val_data = data_pp.construct_train_val_datasets_from_trajs(
-        train_trajs, rollout_length, val_size, data_subkey
+    if config['DLO'] == 'aluminium-rod':
+        val_size = 0.15
+        trajs = data_pp.load_trajs(config['train_trajs'])
+        train_trajs, val_trajs = data_pp.split_trajs_into_train_val(trajs, val_size, key)
+    elif config['DLO'] == 'pool-noodle':
+        train_trajs = data_pp.load_trajs(config['train_trajs'])
+        val_trajs = data_pp.load_trajs(config['val_trajs'])
+    else:
+        raise ValueError('Please specify a valid DLO in the config file')
+
+    train_data, val_data = data_pp.construct_train_val_datasets(
+        train_trajs, val_trajs, rollout_length
     )
     return train_data
 
@@ -289,9 +285,11 @@ def performance_on_different_rollout_lengths(
         dyn_model: str = 'rnn',
         x_rollout: int = 1
 ):
-    config_names = ([f'{dyn_model}_{n_seg}seg_NN.yml',
-                    f'{dyn_model}_{n_seg}seg_FFK.yml',
-                    f'{dyn_model}_{n_seg}seg_LFK.yml'])
+    # config_names = ([f'{dyn_model}_{n_seg}seg_NN.yml',
+    #                 f'{dyn_model}_{n_seg}seg_FFK.yml',
+    #                 f'{dyn_model}_{n_seg}seg_LFK.yml'])
+    # config_names = [f'PN_{dyn_model}_{n_seg}seg_LFK.yml']
+    config_names = [f'{dyn_model}_{n_seg}seg_FFK.yml']
     configs = get_models_configs(config_names)
     trained_models = get_trained_models(configs)
 
@@ -299,10 +297,13 @@ def performance_on_different_rollout_lengths(
     train_data = get_data_used_for_training(configs[0])
     train_rollout_length = configs[0]['rollout_length']
     test_rollout_length = x_rollout * train_rollout_length
-    n_test_trajs = [2, 15, 17] # [15, 17]
+    try:
+        n_test_trajs = configs[0]['test_trajs']
+    except KeyError:
+        n_test_trajs = [2, 15, 17]
     test_trajs = data_pp.load_trajs(n_test_trajs)
     test_data = data_pp.construct_test_dataset_from_trajs(
-        test_trajs, test_rollout_length, train_data, 'sliding', scale_outputs=True
+        test_trajs, test_rollout_length, train_data, 'sliding', scale_outputs=False
     )
     output_scalar = test_data.output_scalar
 
@@ -374,39 +375,50 @@ def analyse_encoder():
     plt.show()
 
 
-def visualize_rfem_motion():
-    n_seg = 7
-    dyn_type = 'resnet'
-    config_names = [f'{dyn_type}_{n_seg}seg_FFK.yml',
-                    f'{dyn_type}_{n_seg}seg_NN.yml']
+def visualize_rfem_motion(n_seg: int = 7, dyn_model: str = 'rnn', x_rollout: int = 5):
+    # config_names = [f'{dyn_type}_{n_seg}seg_FFK.yml',
+    #                 f'{dyn_type}_{n_seg}seg_NN.yml']
+    config_names = [f'PN_{dyn_model}_{n_seg}seg_LFK.yml']
     configs = get_models_configs(config_names)
     trained_models = get_trained_models(configs)
 
     # Get data
     train_data = get_data_used_for_training(configs[0])
-    rollout_length = configs[0]['rollout_length']
-    n_test_trajs = [17]
+    train_rollout_length = configs[0]['rollout_length']
+    test_rollout_length = x_rollout * train_rollout_length
+    try:
+        n_test_trajs = configs[0]['test_trajs']
+    except KeyError:
+        n_test_trajs = [17]
     test_trajs = data_pp.load_trajs(n_test_trajs)
     test_data = data_pp.construct_test_dataset_from_trajs(
-        test_trajs, 5*rollout_length, train_data, 'sliding', scale_outputs=False
+        test_trajs, test_rollout_length, train_data, 'sliding', scale_outputs=False
     )
 
     # Do inference
     X_rnns, Y_preds = evaluate_models(trained_models, test_data, output_scalar=None)
 
+    trained_models[0].decoder._update_rfem_params()
+    learned_rfem_params = trained_models[0].decoder.rfem_params
     pin_dlo_model, pin_dlo_geom_model = models.create_rfem_pinocchio_model(
-        trained_models[0].decoder.rfem_params, add_ee_ref_joint=True
+        learned_rfem_params, add_ee_ref_joint=False
     )
 
-    n_windows = jnp.array([2, 3])
-    for x_rnn_FK, y_NN, u_dec, y in zip(
-        X_rnns[0][n_windows], Y_preds[1][n_windows], test_data.U_decoder[n_windows], test_data.Y[n_windows]):
-        q_rfem, _ = jnp.hsplit(x_rnn_FK, 2)
-        q_b, _ = jnp.hsplit(u_dec, 2)
-        pe_meas, _ = jnp.hsplit(y, 2)
-        pe_pred_NN, _ = jnp.hsplit(y_NN, 2)
-        q = jnp.hstack((q_b, q_rfem, pe_meas, pe_pred_NN))
-        visualize_robot(np.asarray(q), 0.004, 4, pin_dlo_model, pin_dlo_geom_model)
+    n_window = jnp.array([1])
+    q_rfem, _ = jnp.hsplit(X_rnns[0][n_window].squeeze(), 2)
+    q_b, _ = jnp.hsplit(test_data.U_decoder[n_window].squeeze(), 2)
+    q = jnp.hstack((q_b, q_rfem))
+    visualize_robot(np.asarray(q), 0.004, 4, pin_dlo_model, pin_dlo_geom_model)
+
+    # n_windows = jnp.array([2, 3])
+    # for x_rnn_FK, y_NN, u_dec, y in zip(
+    #     X_rnns[0][n_windows], Y_preds[1][n_windows], test_data.U_decoder[n_windows], test_data.Y[n_windows]):
+    #     q_rfem, _ = jnp.hsplit(x_rnn_FK, 2)
+    #     q_b, _ = jnp.hsplit(u_dec, 2)
+    #     pe_meas, _ = jnp.hsplit(y, 2)
+    #     pe_pred_NN, _ = jnp.hsplit(y_NN, 2)
+    #     q = jnp.hstack((q_b, q_rfem, pe_meas, pe_pred_NN))
+    #     visualize_robot(np.asarray(q), 0.004, 4, pin_dlo_model, pin_dlo_geom_model)
 
 
 def how_rfem_regularization_affects_dlo_shape():
@@ -442,18 +454,22 @@ def how_rfem_regularization_affects_dlo_shape():
         visualize_robot(np.asarray(q_), 0.004, 1, pin_dlo_model, pin_dlo_geom_model)
 
 
-def plot_output_prediction(save_fig: False):
+def plot_output_prediction(save_fig: False, x_rollout: int = 10):
     n_seg = 7
-    config_names = [f'resnet_{n_seg}seg_FFK.yml',
-                    f'resnet_{n_seg}seg_NN.yml']
+    # config_names = [f'resnet_{n_seg}seg_FFK.yml',
+    #                 f'resnet_{n_seg}seg_NN.yml']
+    config_names = [f'PN_rnn_{n_seg}seg_LFK.yml']
     configs = get_models_configs(config_names)
     trained_models = get_trained_models(configs)
 
     # Get data
     train_data = get_data_used_for_training(configs[0])
     train_rollout_length = configs[0]['rollout_length']
-    n_test_trajs = [17]
-    test_rollout_length = 10*train_rollout_length
+    try:
+        n_test_trajs = configs[0]['test_trajs']
+    except KeyError:
+        n_test_trajs = [17]
+    test_rollout_length = x_rollout*train_rollout_length
     test_trajs = data_pp.load_trajs(n_test_trajs)
     test_data = data_pp.construct_test_dataset_from_trajs(
         test_trajs, test_rollout_length, train_data, 'sliding', scale_outputs=False
@@ -465,7 +481,7 @@ def plot_output_prediction(save_fig: False):
 
     # Plot outputs
     dt = 0.004
-    n_windows = jnp.array([2])
+    n_windows = jnp.array([0])
     Y_preds_traj = [Y[n_windows].reshape(-1,6) for Y in Y_preds]
     err_trajs = [err[n_windows].reshape(-1,1) for err in pos_err_lengths]
     Y_test_traj = test_data.Y[n_windows].reshape(-1,6)
@@ -492,7 +508,7 @@ def plot_output_prediction(save_fig: False):
     for t, y, l in zip(T, Y, traj_lbls):
         for k, ax in enumerate(axs):
             if l == 'meas':
-                ax.plot(t, y[:,k], 'k', lw=2.5, label=l)
+                ax.plot(t, y[:,k], 'k--', lw=1.5, label=l)
             else:
                 ax.plot(t, y[:,k], lw=1, label=l)
             ax.set_ylabel(y_lbls[k])
@@ -543,9 +559,9 @@ if __name__ == "__main__":
     # main()
     # how_nseg_affects_predictions(save_fig=True)
     # plot_hidden_rfem_state_evolution()
-    performance_on_different_rollout_lengths()
+    # performance_on_different_rollout_lengths()
     # analyse_encoder()
-    # visualize_rfem_motion()
+    visualize_rfem_motion()
     # plot_output_prediction(save_fig=False)
     # how_rfem_regularization_affects_dlo_shape()
     # compute_inference_time()

@@ -1,4 +1,5 @@
 name: resnet_7seg_NN
+DLO: aluminium-rod
 n_seg: 7
 
 # Dynamics model
@@ -34,7 +35,11 @@ train_trajs:
   - 16
   - 18
   - 19
-
+test_trajs: 
+  - 2
+  - 5
+  - 17
+  
 data_seed: 812
 batch_size: 64
 rollout_length: 250

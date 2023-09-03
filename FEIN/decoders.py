@@ -77,6 +77,10 @@ class TrainableFKDecoder(eqx.Module):
         self._update_marker_position()
         return models.create_rfem_custom_model(self.rfem_params)
 
+    def _update_rfem_params(self):
+        self._update_rfem_lengths()
+        self._update_marker_position()
+
     def _update_rfem_lengths(self):
         rfem_lengths = self.rfem_lengths_sqrt**2
         L = jnp.sum(rfem_lengths)

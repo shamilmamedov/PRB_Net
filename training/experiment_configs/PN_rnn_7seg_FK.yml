@@ -1,6 +1,6 @@
 name: PN_rnn_7seg_FK
-n_seg: 7
 DLO: pool-noodle
+n_seg: 7
 
 # Dynamics model
 model_seed: 42

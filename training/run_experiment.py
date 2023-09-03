@@ -17,7 +17,6 @@ import FEIN.utils.data as data_utils
 import FEIN.utils.kinematics as kin_utils
 import FEIN.rfem_kinematics.models as rfem_models
 import training.preprocess_data as data_prpr
-from training import jittering
 
 
 class DLOModel(eqx.Module):

@@ -1,6 +1,6 @@
 name: rnn_7seg_NN
-n_seg: 7
 DLO: aluminium-rod
+n_seg: 7
 
 # Dynamics model
 model_seed: 42
@@ -32,6 +32,10 @@ train_trajs:
   - 16
   - 18
   - 19
+test_trajs: 
+  - 2
+  - 5
+  - 17
 
 data_seed: 812
 batch_size: 64
