@@ -1,4 +1,4 @@
-name: PN_rnn_7seg_LFK
+name: PN_rnn_7seg_LFK_0.5reg
 DLO: pool-noodle
 n_seg: 7
 

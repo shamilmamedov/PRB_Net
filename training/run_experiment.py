@@ -401,7 +401,7 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
         }
         wandb.log(log_dict)
 
-    if save_model == 0:
+    if save_model:
         try:
             dir2save_ = 'training/saved_models/'
             path_ = dir2save_ + config['name'] + '.eqx'
