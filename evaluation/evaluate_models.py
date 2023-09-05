@@ -16,20 +16,6 @@ from FEIN.rfem_kinematics import models
 from FEIN.rfem_kinematics.visualization import visualize_robot
 
 
-def prediction_error_l2_norm(Y_true: jnp.ndarray, Y_pred: jnp.ndarray):
-    E = Y_true - Y_pred
-    return jnp.sqrt(jnp.sum(E**2, axis=1))
-
-
-def prediction_error_mean_l2_norm(Y_true: jnp.ndarray, Y_pred: jnp.ndarray):
-    return jnp.mean(prediction_error_l2_norm(Y_true, Y_pred))
-
-
-def prediction_error_batch_mean_l2_norm(Y_true: jnp.ndarray, Y_pred: jnp.ndarray):
-    mean_l2_norms = jax.vmap(prediction_error_mean_l2_norm)(Y_true, Y_pred)
-    return jnp.mean(mean_l2_norms)
-
-
 def compute_mean_l2_norm_of_pos_prediction_error(
         Y_true: jnp.ndarray, 
         Y_preds: List[jnp.ndarray]
@@ -37,7 +23,7 @@ def compute_mean_l2_norm_of_pos_prediction_error(
     out = []
     for Y_pred in Y_preds:
         out.append(
-            prediction_error_batch_mean_l2_norm(Y_true[:,:,:3], Y_pred[:,:,:3]).item()
+            nn_utils.mean_l2_norm(Y_true[:,:,:3] - Y_pred[:,:,:3]).item()
         )
     return out
 
@@ -49,18 +35,9 @@ def compute_mean_l2_norm_of_vel_prediction_error(
     out = []
     for Y_pred in Y_preds:
         out.append(
-            prediction_error_batch_mean_l2_norm(Y_true[:,:,3:], Y_pred[:,:,3:]).item()
+            nn_utils.mean_l2_norm(Y_true[:,:,3:] - Y_pred[:,:,3:]).item()
         )
     return out
-
-
-def compute_pos_prediction_error_l2_norm(Y, Y_pred_models):
-    pos_err_lengths = []
-    for Y_pred in Y_pred_models:
-        pos_err_lengths.append(
-            prediction_error_l2_norm(Y[:,:,:3], Y_pred[:,:,:3])
-        )
-    return pos_err_lengths
 
 
 def get_models_configs(config_names: List[str]) -> List[dict]:
@@ -95,45 +72,13 @@ def get_trained_models(configs: List[dict]) -> List:
     return trained_models
 
 
-def evaluate_models(models: List, data, output_scalar, batch_size: int = 256):
-    def eval_minibatch(m, out_scalar, U_enc, U_dyn, U_dec):
-        X_, Y_ = jax.vmap(m)(U_enc, U_dyn, U_dec)
-        if out_scalar is not None:
-                Y_ = out_scalar.vtransform(Y_)
-        return X_, Y_
-
-    X_rnn, Y_pred = [], []
+def evaluate_models(models: List, data):
+    X, Y_pred = [], []
     for m in models:
-        if data.Y.shape[0] > batch_size:
-            X_, Y_ = [], []
-            for k in range(0, data.Y.shape[0], batch_size):
-                s_idx = k
-                if k + batch_size < data.Y.shape[0]:
-                    e_idx = k + batch_size
-                else:
-                    e_idx = data.Y.shape[0]
-                X_mb, Y_mb = eval_minibatch(
-                    m,
-                    output_scalar,
-                    data.U_encoder[s_idx:e_idx,0,:],
-                    data.U_dyn[s_idx:e_idx],
-                    data.U_decoder[s_idx:e_idx]
-                )
-                X_.append(X_mb)
-                Y_.append(Y_mb)
-            X_rnn.append(jnp.vstack(X_))
-            Y_pred.append(jnp.vstack(Y_))
-        else:
-            X_, Y_ = eval_minibatch(
-                m,
-                output_scalar, 
-                data.U_encoder[:,0,:],
-                data.U_dyn,
-                data.U_decoder
-            )
-            X_rnn.append(X_)
-            Y_pred.append(Y_)
-    return X_rnn, Y_pred
+        X_, Y_ = jax.vmap(m)(data.U_encoder[:,0,:], data.U_dyn, data.U_decoder)
+        X.append(X_)
+        Y_pred.append(Y_)
+    return X, Y_pred
 
 
 def compute_performance_metrics(Y, Y_pred_models):
@@ -186,12 +131,11 @@ def how_nseg_affects_predictions(save_fig: bool = False):
         test_trajs, rollout_length, train_data, 'sliding', scale_outputs=True
     )
     output_scalar = test_data.output_scalar
-
+    
     X_rnns, Y_preds = evaluate_models(trained_models, test_data, output_scalar)
     pos_error_mean_l2_norm = compute_mean_l2_norm_of_pos_prediction_error(test_data.Y, Y_preds)
     vel_error_mean_l2_norm = compute_mean_l2_norm_of_vel_prediction_error(test_data.Y, Y_preds)
 
-    # rmse, mae = compute_performance_metrics(test_data.Y, Y_preds)
     print(f"test data size: {test_data.Y.shape[0]}")
     print(f"rmse: {pos_error_mean_l2_norm}")
     print(f"mae: {vel_error_mean_l2_norm}")
@@ -212,84 +156,16 @@ def how_nseg_affects_predictions(save_fig: bool = False):
         fig.savefig('CORL_figs/pred_vs_nseg.pdf', format='pdf', dpi=600, bbox_inches='tight')
 
 
-def plot_hidden_rfem_state_evolution():
-    # Load trained models
-    n_segs = [5]
-    dyn_type = 'rnn'
-    config_names = ([f'{dyn_type}_nseg{x}_FFK.yml' for x in n_segs] + 
-                    [f'{dyn_type}_nseg{x}_LFK.yml' for x in n_segs])
-    configs = get_models_configs(config_names)
-    trained_models = get_trained_models(configs)
-
-    # Load train and val data to get sacalars
-    train_data = get_data_used_for_training(configs[0])
-    rollout_length = configs[0]['rollout_length']
-    n_test_trajs = [17] # [15, 17]
-    test_trajs = data_pp.load_trajs(n_test_trajs)
-    test_data = data_pp.construct_test_dataset_from_trajs(
-        test_trajs, rollout_length, train_data, 'sliding', scale_outputs=True
-    )
-    output_scalar = test_data.output_scalar
-    X_rnns, Y_preds = evaluate_models(trained_models, test_data, output_scalar)
-
-    X_rnn_ffk, X_rnn_lfk = X_rnns
-    plot_rfem_states(X_rnn_lfk)
-
-
-def plot_numerical_velocities_against_real(X):
-    dt = 0.004
-    # Reshape sliding windows into a continuous vector
-    X_ = X.reshape(-1, X.shape[2])
-    q_rfem, dq_rfem = jnp.hsplit(X_,2)
-    t_ = jnp.arange(0, X_.shape[0])*dt
-    t_reset = jnp.arange(0, X_.shape[0], X.shape[1])*dt
-
-    dq_rfem_num = (q_rfem[1:,:] - q_rfem[:-1,:])/dt
-
-    n_jnts = [0,1]
-    _, ax = plt.subplots()
-    ax.plot(t_, dq_rfem[:,n_jnts])
-    ax.plot(t_[1:], dq_rfem_num[:,n_jnts], ls='--')
-    ax.set_ylim([-5,5])
-    plt.show()
-
-
-def plot_rfem_states(X):
-    dt = 0.004
-    # Reshape sliding windows into a continuous vector
-    X_ = X.reshape(-1, X.shape[2])
-    q_rfem, dq_rfem = jnp.hsplit(X_,2)
-    t_ = jnp.arange(0, X_.shape[0])*dt
-    t_reset = jnp.arange(0, X_.shape[0], X.shape[1])*dt
-
-    _, axs = plt.subplots(2,1)
-    axs[0].plot(t_, q_rfem)
-    for tr in t_reset:
-        axs[0].axvline(tr, ls='--')
-    axs[0].grid(alpha=0.25)
-
-    axs[1].plot(t_, dq_rfem)
-    for tr in t_reset:
-        axs[1].axvline(tr, ls='--')
-    axs[1].grid(alpha=0.25)
-    plt.tight_layout()
-    plt.show()
-
-
-def dlo_shape():
-    pass
-
-
 def performance_on_different_rollout_lengths(
         n_seg: int = 7,
-        dyn_model: str = 'rnn',
+        dyn_model: str = 'node',
         x_rollout: int = 1
 ):
     # config_names = ([f'{dyn_model}_{n_seg}seg_NN.yml',
     #                 f'{dyn_model}_{n_seg}seg_FFK.yml',
     #                 f'{dyn_model}_{n_seg}seg_LFK.yml'])
     # config_names = [f'PN_{dyn_model}_{n_seg}seg_LFK.yml']
-    config_names = [f'{dyn_model}_{n_seg}seg_FFK.yml']
+    config_names = [f'PN_{dyn_model}_{n_seg}seg_FFK.yml']
     configs = get_models_configs(config_names)
     trained_models = get_trained_models(configs)
 
@@ -297,17 +173,15 @@ def performance_on_different_rollout_lengths(
     train_data = get_data_used_for_training(configs[0])
     train_rollout_length = configs[0]['rollout_length']
     test_rollout_length = x_rollout * train_rollout_length
-    try:
-        n_test_trajs = configs[0]['test_trajs']
-    except KeyError:
-        n_test_trajs = [2, 15, 17]
+    n_test_trajs = configs[0]['test_trajs']
     test_trajs = data_pp.load_trajs(n_test_trajs)
     test_data = data_pp.construct_test_dataset_from_trajs(
         test_trajs, test_rollout_length, train_data, 'sliding', scale_outputs=False
     )
-    output_scalar = test_data.output_scalar
 
-    X_rnns, Y_preds = evaluate_models(trained_models, test_data, output_scalar, batch_size=128)
+    # Evaluate models
+    X, Y_preds = evaluate_models(trained_models, test_data)
+    
     pos_error_mean_l2_norm = compute_mean_l2_norm_of_pos_prediction_error(test_data.Y, Y_preds)
     vel_error_mean_l2_norm = compute_mean_l2_norm_of_vel_prediction_error(test_data.Y, Y_preds)
 
@@ -318,61 +192,6 @@ def performance_on_different_rollout_lengths(
     df.loc['vel_err_norm'] = vel_error_mean_l2_norm
     pd.set_option('display.precision', 3)
     print(df)
-
-
-
-def analyse_encoder():
-    n_seg = 7
-    dyn_type = 'resnet'
-    config_names = [f'{dyn_type}_{n_seg}seg_NN.yml']
-    configs = get_models_configs(config_names)
-    trained_models = get_trained_models(configs)
-
-    # Load train and val data to get sacalars
-    train_data = get_data_used_for_training(configs[0])
-    rollout_length = configs[0]['rollout_length']
-    n_test_trajs = [17] # [15, 17]
-    test_trajs = data_pp.load_trajs(n_test_trajs)
-    test_data = data_pp.construct_test_dataset_from_trajs(
-        test_trajs, rollout_length, train_data, 'sliding', scale_outputs=True
-    )
-    output_scalar = test_data.output_scalar
-    X_rnns, Y_preds = evaluate_models(trained_models, test_data, output_scalar)
-    X_encs, Y_encs = [], []
-    for m in trained_models:
-        X_ = jax.vmap(jax.vmap(m.encoder))(test_data.U_encoder)
-        X_encs.append(X_)
-        Y_encs.append(jax.vmap(jax.vmap(m.decoder))(X_, test_data.U_decoder))
-
-
-    t = jnp.arange(0, rollout_length+1)*0.004
-    Q_rfem_enc, dQ_rfem_enc = jnp.split(X_encs[0], 2, axis=2)
-    Q_rfem_dyn, dQ_rfem_dyn = jnp.split(X_rnns[0], 2, axis=2)
-    n_window = 8
-    n_joints = [2,3]
-    _, axs = plt.subplots(2,1)
-    axs[0].plot(t, Q_rfem_enc[n_window,:,n_joints].T)
-    axs[0].plot(t, Q_rfem_dyn[n_window,:,n_joints].T, '--')
-
-    axs[1].plot(t, dQ_rfem_enc[n_window,:,n_joints].T)
-    axs[1].plot(t, dQ_rfem_dyn[n_window,:,n_joints].T, '--')
-    plt.tight_layout()
-
-    T = [t]*3
-    Y = [test_data.Y[n_window], Y_encs[0][n_window], Y_preds[0][n_window]]
-    traj_lbls = ['meas', 'enc', 'dyn']
-    axes = ['x', 'y', 'z']
-    y_lbls = ([f'p_e_{x}' for x in axes] + [f'dp_e_{x}' for x in axes])
-    _, axs = plt.subplots(3, 2, sharex=True)
-    axs = axs.T.reshape(-1)
-    for t, y, l in zip(T, Y, traj_lbls):
-        for k, ax in enumerate(axs):
-            ax.plot(t, y[:,k], label=l)
-            ax.set_ylabel(y_lbls[k])
-            ax.grid(alpha=0.25)
-            ax.legend()
-    plt.tight_layout()
-    plt.show()
 
 
 def visualize_rfem_motion(n_seg: int = 7, dyn_model: str = 'rnn', x_rollout: int = 5):
@@ -477,13 +296,11 @@ def plot_output_prediction(save_fig: False, x_rollout: int = 10):
 
     # Do inference
     X_rnns, Y_preds = evaluate_models(trained_models, test_data, output_scalar=None)
-    pos_err_lengths = compute_pos_prediction_error_l2_norm(test_data.Y, Y_preds)
 
     # Plot outputs
     dt = 0.004
     n_windows = jnp.array([0])
     Y_preds_traj = [Y[n_windows].reshape(-1,6) for Y in Y_preds]
-    err_trajs = [err[n_windows].reshape(-1,1) for err in pos_err_lengths]
     Y_test_traj = test_data.Y[n_windows].reshape(-1,6)
     t_ = jnp.arange(0, Y_test_traj.shape[0])*dt
     T = [t_]*(len(Y_preds_traj) + 1)
@@ -559,9 +376,9 @@ if __name__ == "__main__":
     # main()
     # how_nseg_affects_predictions(save_fig=True)
     # plot_hidden_rfem_state_evolution()
-    # performance_on_different_rollout_lengths()
+    performance_on_different_rollout_lengths()
     # analyse_encoder()
-    visualize_rfem_motion()
+    # visualize_rfem_motion()
     # plot_output_prediction(save_fig=False)
     # how_rfem_regularization_affects_dlo_shape()
     # compute_inference_time()

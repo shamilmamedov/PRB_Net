@@ -38,7 +38,7 @@ dynamics:
   type: DiscretizedNODE
   n_u: 18
   width: 128
-  depth: 2
+  depth: 1
   activation: relu6
   integrator:
     dt: 0.004
@@ -55,10 +55,10 @@ decoder:
 # Optimizer
 optimizer: adamw # rmsprop sgd
 learning_rate_scheduler: polynomial 
-initial_learning_rate: 0.002
+initial_learning_rate: 1.E-3
 transition_epochs: 25
 final_learning_rate: 1.E-3
-polynomial_power: 0.5
+polynomial_power: 0.0
 weight_decay: 0.01
 
 # Cost function weights

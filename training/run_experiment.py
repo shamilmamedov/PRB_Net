@@ -118,7 +118,9 @@ def get_decoder(dec_configs, dlo, n_seg, key):
         elif dlo == 'pool-noodle':
             marker_pos_path = configs_dir + 'pool-noodle-vicon-marker-locations.yaml'
             dlo_phys_params_path = configs_dir + 'pool-noodle-physical-params.yaml'
-            
+        else:
+            raise ValueError('Please specify a valid DLO name') 
+
         bjoint = kin_utils.JointType.FREE
         dlo_params = rfem_models.load_dlo_params_from_yaml(dlo_phys_params_path)
         p_markers = data_utils.load_vicon_marker_locations(marker_pos_path)
@@ -310,7 +312,7 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
     # Parse loss weights
     alpha_q_rfem = config['q_rfem_l2']
     alpha_dq_rfem = config['dq_rfem_l2']
-    alpha_p_b = 0.1
+    alpha_p_b = 1.
     alpha_phi_b = 0.1
     alpha_rfem_length = 0.01
     alpha_dlo_length = 1.
@@ -325,11 +327,12 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
         pass
 
     # Train model
+    best_model = None
+    best_avg_val_rmse = 1000
     print(f'Steps per epoch: {steps_per_epoch}')
     for epoch in range(n_epochs):
         lr_epoch = [] 
         epoch_train_loss = []
-        W_hh_norm, W_ih_norm = [], []
         for step in range(steps_per_epoch): 
             # Get current batch
             U_enc, U_dyn, U_dec, Y = train_data_loader.get_batch(batch_size)
@@ -339,17 +342,14 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
             )
             epoch_train_loss.append(loss.item())
             lr_epoch.append(opt_state.hyperparams['learning_rate'].item())
-            if config['dynamics']['type'] == 'RNN':
-                W_hh_norm.append(jnp.linalg.norm(grads.dynamics.state_transition.weight_hh).item())
-                W_ih_norm.append(jnp.linalg.norm(grads.dynamics.state_transition.weight_ih).item())
-
+            
         avg_loss_ = sum(epoch_train_loss) / steps_per_epoch
         avg_lr_ = sum(lr_epoch) / steps_per_epoch
         print(f"Epoch={epoch + 1}, loss={avg_loss_:.5f}")
         print(f"\t lr = {avg_lr_:.5f}")
        
 
-	# Compute test set metrics
+	    # Compute test set metrics
         len_val_data = len(val_data.Y)
         test_batch_size = 256
         loss_, mae_, rmse_, mse_ = [], [], [], []
@@ -380,9 +380,16 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
         print(f"\t mae on val data = {avg_mae_:.5f}")
         print(f"\t rmse on val data = {avg_rmse_:.5f}")
         print(f"\t mse enc-dyn on val data = {avg_mse_:.5f}")
+        if config['decoder']['type'] == 'TrainableFKDecoder':
+            print(f'\t qb offset = {model.decoder.qb_offset[:3]}')
+
         if avg_mse_ > 1000:
             break
         
+        if avg_rmse_ < best_avg_val_rmse:
+            best_avg_val_rmse = avg_rmse_
+            best_model = model    
+
         # Log required metrics to wandb
         log_dict = {
             'loss_train': avg_loss_,
@@ -392,19 +399,16 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
             'mae_val': avg_mae_,
             'mse_enc_dyn_val': avg_mse_
         }
-        if config['dynamics']['type'] == 'RNN':
-            log_dict['norm_rnn_Whh'] = sum(W_hh_norm) / len(W_hh_norm)
-            log_dict['norm_rnn_Wih'] = sum(W_ih_norm) / len(W_ih_norm),
         wandb.log(log_dict)
 
-        if save_model and epoch % 5 == 0:
-            try:
-                dir2save_ = 'training/saved_models/'
-                path_ = dir2save_ + config['name'] + '.eqx'
-                eqx.tree_serialise_leaves(path_, model)
-                wandb.save(path_)
-            except KeyError:
-                pass
+    if save_model == 0:
+        try:
+            dir2save_ = 'training/saved_models/'
+            path_ = dir2save_ + config['name'] + '.eqx'
+            eqx.tree_serialise_leaves(path_, best_model)
+            wandb.save(path_)
+        except KeyError:
+            pass
     
     wandb.finish()
 

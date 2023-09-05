@@ -100,6 +100,6 @@ parameters:
 
   # Cost function weights
   q_rfem_l2: 
-    value: 0.5
+    value: 1.0
   dq_rfem_l2: 
-    value: 0.05
+    value: 0.0

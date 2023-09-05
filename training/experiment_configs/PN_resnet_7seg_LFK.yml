@@ -38,17 +38,15 @@ test_trajs:
 data_seed: 812
 batch_size: 64
 rollout_length: 250
-n_epochs: 25
+n_epochs: 40
 
 # Rollout legnth scheduler
 rollout_length_scheduler:
   init_value: 0.1
   boundaries:
-    - 5
-    - 15
+    - 10
   scales:
-    - 2
-    - 5
+    - 10
 
 # Optimizer
 optimizer: adamw # rmsprop sgd
@@ -60,5 +58,5 @@ polynomial_power: 0
 weight_decay: 0.01
 
 # Loss function
-q_rfem_l2: 0.0
-dq_rfem_l2: 0.0
+q_rfem_l2: 1.0
+dq_rfem_l2: 0.1

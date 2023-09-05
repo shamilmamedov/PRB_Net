@@ -49,3 +49,15 @@ def l1_loss(x, alpha):
 def mae_loss(Y, Y_pred):
     E = Y - Y_pred
     return jnp.mean(jnp.mean(jnp.sum(jnp.abs(E), axis=2), axis=1))
+
+
+@jax.jit
+def mean_l2_norm(x):
+    def _mean_l2_norm(x):
+        se = jnp.sum(x**2, axis=1)
+        l2_norm = jnp.sqrt(se)
+        return jnp.mean(l2_norm)
+
+    return jnp.mean(
+        jax.vmap(_mean_l2_norm)(x)
+    )

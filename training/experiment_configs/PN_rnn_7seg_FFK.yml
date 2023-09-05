@@ -34,17 +34,15 @@ test_trajs:
 data_seed: 812
 batch_size: 64
 rollout_length: 250
-n_epochs: 25
+n_epochs: 30
 
 # Rollout legnth scheduler
-# rollout_length_scheduler:
-#   init_value: 0.1
-#   boundaries:
-#     - 4
-#     - 12
-#   scales:
-#     - 5
-#     - 2
+rollout_length_scheduler:
+  init_value: 0.1
+  boundaries:
+    - 5
+  scales:
+    - 10
 
 # Optimizer
 optimizer: adamw # rmsprop sgd

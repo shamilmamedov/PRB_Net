@@ -1,4 +1,4 @@
-name: PN_node_nseg7_FFK
+name: PN_node_7seg_NN
 DLO: pool-noodle
 n_seg: 7
 
@@ -18,7 +18,7 @@ test_trajs:
 data_seed: 812
 batch_size: 64
 rollout_length: 250
-n_epochs: 10
+n_epochs: 15
 
 # Rollout legnth scheduler
 rollout_length_scheduler:
@@ -31,7 +31,7 @@ rollout_length_scheduler:
 # Dynamics model
 model_seed: 42
 encoder:
-  type: PINN
+  type: NN
   width: 128
   depth: 2
   activation: tanh
@@ -48,16 +48,19 @@ dynamics:
     atol: 1.e-4
 
 decoder:
-  type: FK
+  type: NN
   n_y: 6
-  
+  width: 128
+  depth: 2
+  activation: tanh
+
 # Optimizer
 optimizer: adamw # rmsprop sgd
 learning_rate_scheduler: polynomial 
 initial_learning_rate: 1.E-3
 transition_epochs: 25
 final_learning_rate: 1.E-4
-polynomial_power: 0.0
+polynomial_power: 0.
 weight_decay: 0.01
 
 # Cost function weights
