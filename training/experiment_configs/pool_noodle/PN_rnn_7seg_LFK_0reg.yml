@@ -1,4 +1,4 @@
-name: PN_rnn_7seg_LFK_1reg
+name: PN_rnn_7seg_LFK_0reg
 DLO: pool-noodle
 n_seg: 7
 
@@ -54,5 +54,5 @@ polynomial_power: 0
 weight_decay: 1.E-4
 
 # Cost function weights
-q_rfem_l2: 1.0
-dq_rfem_l2: 0.1
+q_rfem_l2: 0.0
+dq_rfem_l2: 0.0
