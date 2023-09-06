@@ -204,11 +204,11 @@ def get_data(config, key):
 
     if config['DLO'] == 'aluminium-rod':
         val_size = 0.15
-        trajs = data_prpr.load_trajs(config['train_trajs'])
+        trajs = data_utils.load_trajs(config['train_trajs'], config['DLO'])
         train_trajs, val_trajs = data_prpr.split_trajs_into_train_val(trajs, val_size, key)
     elif config['DLO'] == 'pool-noodle':
-        train_trajs = data_prpr.load_trajs(config['train_trajs'])
-        val_trajs = data_prpr.load_trajs(config['val_trajs'])
+        train_trajs = data_utils.load_trajs(config['train_trajs'], config['DLO'])
+        val_trajs = data_utils.load_trajs(config['val_trajs'], config['DLO'])
     else:
         raise ValueError('Please specify a valid DLO in the config file')
 
@@ -415,3 +415,5 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
 
 if __name__ == '__main__': 
     fire.Fire(main)
+    # config  = 'tests/experiment_configs/rnn_test_6.yml'
+    # main(config=config, wandb_mode='disabled', save_model=False)

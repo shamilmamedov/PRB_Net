@@ -13,7 +13,7 @@ encoder:
 dynamics:
   type: ResNet
   n_u: 18
-  width: 256
+  width: 128
   depth: 2
   activation: relu6
 

@@ -3,7 +3,7 @@ import jax
 import itertools
 
 
-from FEIN.utils.data import JAXMinMaxScalar, DLODataset, DLODatasetScalars, load_trajs
+from FEIN.utils.data import JAXMinMaxScalar, DLODataset, DLODatasetScalars
 
 
 def train_val_split_idxs(len_traj, t_exctn, ratio, key):
@@ -59,6 +59,18 @@ def get_train_val_idxs(trajs, val_size, key):
         t_exctn = traj_texctn[traj.n_traj]
         key, subkey = jax.random.split(key)
         train_idxs_k, val_idxs_k = train_val_split_idxs(len(traj), t_exctn, val_size, subkey)
+        train_idxs.append(train_idxs_k)
+        val_idxs.append(val_idxs_k)
+    return train_idxs, val_idxs
+
+
+def get_train_val_idxs2(n_trajs, val_size, key):
+    traj_texctn = get_traj_to_excitation_time_dict()
+    train_idxs, val_idxs = [], []
+    for n_traj in n_trajs:
+        t_exctn = traj_texctn[n_traj]
+        key, subkey = jax.random.split(key)
+        train_idxs_k, val_idxs_k = train_val_split_idxs(n_traj, t_exctn, val_size, subkey)
         train_idxs.append(train_idxs_k)
         val_idxs.append(val_idxs_k)
     return train_idxs, val_idxs
@@ -338,10 +350,7 @@ def construct_test_dataset_from_trajs(
 
 
 def main():
-    n_trajs = [16]    
-    
-    trajs = load_trajs(n_trajs)
-    trajs[0].plot('p_e')
+    pass
     
 
 if __name__ == "__main__":

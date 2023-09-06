@@ -53,12 +53,16 @@ class DLOTrajectory:
     def __init__(
         self, 
         traj_path: str,
-        n_traj: int = None
+        n_traj: int = None,
+        idxs: tuple = None
     ) -> None:
         axes = ['x', 'y', 'z']
         self.dt = 0.004
         self.n_traj = n_traj
         self.data = pd.read_csv(traj_path)
+
+        if idxs is not None:
+            self.data = self.data.loc[idxs, :]
         
         self.t = jnp.array(self.data[['t']].values)
 
@@ -148,7 +152,7 @@ def load_vicon_marker_locations(path_to_yaml: str):
     return marker_dist
 
 
-def load_trajs(n_trajs: list, dlo: str = 'aluminium-rod'):
+def load_trajs(n_trajs: list, dlo: str):
     if dlo not in ['aluminium-rod', 'pool-noodle']:
         raise ValueError('Please provide a valid DLO name')
     dataset_path = f'dataset/{dlo}/'

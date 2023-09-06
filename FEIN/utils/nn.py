@@ -52,6 +52,13 @@ def mae_loss(Y, Y_pred):
 
 
 @jax.jit
+def l2_norm(x):
+    def _l2_norm(x):
+        return jnp.sqrt(jnp.sum(x**2, axis=1))
+    return jax.vmap(_l2_norm)(x)
+
+
+@jax.jit
 def mean_l2_norm(x):
     def _mean_l2_norm(x):
         se = jnp.sum(x**2, axis=1)

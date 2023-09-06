@@ -7,11 +7,13 @@ import matplotlib.pyplot as plt
 from typing import List
 import pandas as pd
 import time
+import seaborn as sns
 
 
 from training import preprocess_data as data_pp
 from training.run_experiment import get_model
 import FEIN.utils.nn as nn_utils
+import FEIN.utils.data as data_utils
 from FEIN.rfem_kinematics import models
 from FEIN.rfem_kinematics.visualization import visualize_robot
 
@@ -28,6 +30,18 @@ def compute_mean_l2_norm_of_pos_prediction_error(
     return out
 
 
+def compute_l2_norm_of_pos_prediction_error(
+        Y_true: jnp.ndarray, 
+        Y_preds: List[jnp.ndarray]
+    ):
+    out = []
+    for Y_pred in Y_preds:
+        out.append(
+            nn_utils.l2_norm(Y_true[:,:,:3] - Y_pred[:,:,:3]).reshape(-1)
+        )
+    return out
+
+
 def compute_mean_l2_norm_of_vel_prediction_error(
         Y_true: jnp.ndarray, 
         Y_preds: List[jnp.ndarray]
@@ -36,6 +50,18 @@ def compute_mean_l2_norm_of_vel_prediction_error(
     for Y_pred in Y_preds:
         out.append(
             nn_utils.mean_l2_norm(Y_true[:,:,3:] - Y_pred[:,:,3:]).item()
+        )
+    return out
+
+
+def compute_l2_norm_of_vel_prediction_error(
+        Y_true: jnp.ndarray, 
+        Y_preds: List[jnp.ndarray]
+    ):
+    out = []
+    for Y_pred in Y_preds:
+        out.append(
+            nn_utils.l2_norm(Y_true[:,:,3:] - Y_pred[:,:,3:])
         )
     return out
 
@@ -100,11 +126,11 @@ def get_data_used_for_training(config):
 
     if config['DLO'] == 'aluminium-rod':
         val_size = 0.15
-        trajs = data_pp.load_trajs(config['train_trajs'])
+        trajs = data_utils.load_trajs(config['train_trajs'], config['DLO'])
         train_trajs, val_trajs = data_pp.split_trajs_into_train_val(trajs, val_size, key)
     elif config['DLO'] == 'pool-noodle':
-        train_trajs = data_pp.load_trajs(config['train_trajs'])
-        val_trajs = data_pp.load_trajs(config['val_trajs'])
+        train_trajs = data_utils.load_trajs(config['train_trajs'], config['DLO'])
+        val_trajs = data_utils.load_trajs(config['val_trajs'], config['DLO'])
     else:
         raise ValueError('Please specify a valid DLO in the config file')
 
@@ -157,6 +183,7 @@ def how_nseg_affects_predictions(save_fig: bool = False):
 
 
 def performance_on_different_rollout_lengths(
+        dlo: str = 'pool_noodle',
         n_seg: int = 7,
         dyn_model: str = 'node',
         x_rollout: int = 1
@@ -165,7 +192,8 @@ def performance_on_different_rollout_lengths(
     #                 f'{dyn_model}_{n_seg}seg_FFK.yml',
     #                 f'{dyn_model}_{n_seg}seg_LFK.yml'])
     # config_names = [f'PN_{dyn_model}_{n_seg}seg_LFK.yml']
-    config_names = [f'PN_{dyn_model}_{n_seg}seg_FFK.yml']
+    config_names = [f'{dlo}/PN_{dyn_model}_{n_seg}seg_LFK.yml',
+                    f'{dlo}/PN_{dyn_model}_{n_seg}seg_NN.yml']
     configs = get_models_configs(config_names)
     trained_models = get_trained_models(configs)
 
@@ -174,7 +202,7 @@ def performance_on_different_rollout_lengths(
     train_rollout_length = configs[0]['rollout_length']
     test_rollout_length = x_rollout * train_rollout_length
     n_test_trajs = configs[0]['test_trajs']
-    test_trajs = data_pp.load_trajs(n_test_trajs)
+    test_trajs = data_utils.load_trajs(n_test_trajs, 'pool-noodle')
     test_data = data_pp.construct_test_dataset_from_trajs(
         test_trajs, test_rollout_length, train_data, 'sliding', scale_outputs=False
     )
@@ -185,6 +213,8 @@ def performance_on_different_rollout_lengths(
     pos_error_mean_l2_norm = compute_mean_l2_norm_of_pos_prediction_error(test_data.Y, Y_preds)
     vel_error_mean_l2_norm = compute_mean_l2_norm_of_vel_prediction_error(test_data.Y, Y_preds)
 
+    pos_error_l2_norm = compute_l2_norm_of_pos_prediction_error(test_data.Y, Y_preds)
+
     column_names = [c['name'] for c in configs]
     row_names = ['pos_err_norm', 'vel_err_norm']
     df = pd.DataFrame(columns=column_names, index=row_names)
@@ -192,6 +222,16 @@ def performance_on_different_rollout_lengths(
     df.loc['vel_err_norm'] = vel_error_mean_l2_norm
     pd.set_option('display.precision', 3)
     print(df)
+
+    pos_error_l2_norm_in_cm = [100*err for err in pos_error_l2_norm]
+    # plot the violinplot using seaborn library, use log scale along y-axis
+    sns.violinplot(data=pos_error_l2_norm_in_cm)#, scale='count', inner='quartile')
+    plt.yscale('log')
+    plt.xticks([0, 1], ['LFK', 'NN'])
+    plt.ylabel(r'$|p_\mathrm{e} - \hat p_\mathrm{e}|_2$ [cm]')
+    plt.grid(alpha=0.25)
+    plt.tight_layout()
+    plt.show()
 
 
 def visualize_rfem_motion(n_seg: int = 7, dyn_model: str = 'rnn', x_rollout: int = 5):
@@ -392,9 +432,9 @@ if __name__ == "__main__":
     # main()
     # how_nseg_affects_predictions(save_fig=True)
     # plot_hidden_rfem_state_evolution()
-    # performance_on_different_rollout_lengths()
+    performance_on_different_rollout_lengths()
     # analyse_encoder()
     # visualize_rfem_motion()
     # plot_output_prediction(save_fig=False)
-    how_rfem_regularization_affects_dlo_shape()
+    # how_rfem_regularization_affects_dlo_shape()
     # compute_inference_time()
