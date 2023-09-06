@@ -8,14 +8,13 @@ parameters:
   n_seg: 
     value: 7
   DLO:
-    value: aluminum-rod
+    value: aluminium-rod
 
   # Dataset
   train_trajs:
     value:
       - 1
       - 4
-      - 6
       - 9
       - 13
       - 14
