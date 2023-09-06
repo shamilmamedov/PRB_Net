@@ -278,56 +278,6 @@ def create_rfem_custom_model(rfem_params: RFEMParameters):
     return model
 
 
-def create_learnable_rfem_custom_model(rfem_params: RFEMParameters):
-    n_seg = rfem_params.n_seg
-    base_joint_type = rfem_params.base_joint_type
-    rfe_m = rfem_params.m
-    rfe_rc = rfem_params.rc
-    rfe_I = rfem_params.I
-    jforcecallbacks = rfem_params.joint_force_callbacks
-    p_markers = rfem_params.marker_positions
-
-    jparents = [-1] + [k for k in range(n_seg)]
-    jtypes = [base_joint_type] + [jutils.JointType.U_ZY for _ in range(n_seg)]
-    jnqs = [jutils.JOINTTYPE_TO_NQ[x] for x in jtypes]
-
-    jlxs = rfem.compute_sde_joint_placements(rfem_params.lengths, frame = 'parent')
-    jplacements = ([{'T': jutils.Rp2Trans(jnp.eye(3), jnp.array([[jlxs[0], 0., 0.]]).T)}] + # from base to first joint
-        [{'T': jutils.Rp2Trans(jnp.eye(3), jnp.array([[lxk, 0., 0.]]).T)} for lxk in jlxs[1:]]
-    )
-
-    inertias = [{'I': jutils.inertia_at_joint(R_ab=jnp.eye(3), p_ba=rck, m=mk, I_b=Ik)}
-                for mk, rck, Ik in zip(rfe_m, rfe_rc, rfe_I)]
-
-    # Describe frames which correspond to sensor placements
-    # fparents = rfem.compute_marker_frames_parent_joints(rfem_params.lengths, p_markers)
-    fparents = [n_seg] # fix the parent of the frame to the last joint
-    flxs = rfem.compute_marker_frames_placements(rfem_params.lengths, fparents, p_markers)
-    fplacements = [{'T': jutils.Rp2Trans(jnp.eye(3), jnp.array([[lxk, 0., 0.]]).T)} for lxk in flxs]
-
-    # Descriptive params
-    n_bodies = n_seg+1
-    n_joints = n_seg+1
-    n_q = sum(jnqs)
-    n_frames = len(fparents)
-
-    model = RobotDescription(
-        n_bodies,
-        n_joints,
-        n_q,
-        n_frames,
-        jtypes,
-        jnqs,
-        jparents,
-        jplacements,
-        fparents,
-        fplacements,
-        inertias,
-        jforcecallbacks
-    )
-    return model
-
-
 def load_aluminium_rod_params():
     """ Loads parameters for alimunium rod
     """
