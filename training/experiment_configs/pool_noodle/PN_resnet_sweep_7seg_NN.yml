@@ -1,4 +1,4 @@
-name: resnet_sweep_7seg_LFK
+name: PN_resnet_sweep_7seg_NN
 method: random
 metric:
   goal: minimize
@@ -8,10 +8,10 @@ parameters:
   n_seg: 
     value: 7
   DLO:
-    value: aluminum-rod
+    value: pool-noodle
 
   # Dataset
-  train_trajs: 
+  train_trajs:
     value:
       - 1
       - 4
@@ -51,7 +51,7 @@ parameters:
   encoder:
     parameters:
       type: 
-        value: PINN
+        value: NN
       width: 
         values:
           - 64
@@ -81,9 +81,17 @@ parameters:
   decoder:
     parameters:
       type: 
-        value: TrainableFKDecoder
+        value: NN
       n_y: 
         value: 6
+      width:
+        values:
+          - 64
+          - 128
+      depth:
+        value: 2
+      activation:
+        value: tanh
 
   # Optimizer
   optimizer: 
@@ -96,7 +104,7 @@ parameters:
       - 0.002
       - 0.003
   final_learning_rate:
-    value: 0.00001
+    value: 1.E-4
   polynomial_power:
     values:
       - 0.5
@@ -110,6 +118,6 @@ parameters:
 
   # Cost function weights
   q_rfem_l2: 
-    value: 1.0 
+    value: 0.0
   dq_rfem_l2: 
-    value: 0.1
+    value: 0.0

@@ -7,6 +7,8 @@ metric:
 parameters:  
   n_seg: 
     value: 7
+  DLO:
+    value: aluminum-rod
 
   # Dataset
   train_trajs:
@@ -30,6 +32,18 @@ parameters:
   n_epochs:
     value: 25 
 
+  # Rollout legnth scheduler
+  rollout_length_scheduler:
+    parameters:
+      init_value: 
+        value: 0.1
+      boundaries:
+        values:
+          - 10
+      scales:
+        values:
+          - 10
+
   # Dynamics model
   model_seed:
     value: 42
@@ -43,9 +57,7 @@ parameters:
           - 64
           - 128
       depth: 
-        values:
-          - 2
-          - 3
+        value: 2
       activation: 
         value: tanh
 
@@ -57,12 +69,10 @@ parameters:
         value: 18
       width: 
         values:
+          - 64
           - 128
-          - 256
       depth: 
-        values:
-          - 2
-          - 3
+        value: 2
       activation: 
         values:
           - relu6
@@ -79,9 +89,7 @@ parameters:
           - 64
           - 128
       depth:
-        values:
-          - 2
-          - 3
+        value: 2
       activation:
         value: tanh
 

@@ -61,5 +61,5 @@ polynomial_power: 0.0
 weight_decay: 0.01
 
 # Cost function weights
-q_rfem_l2: 0.0
-dq_rfem_l2: 0.0
+q_rfem_l2: 0.5
+dq_rfem_l2: 0.05

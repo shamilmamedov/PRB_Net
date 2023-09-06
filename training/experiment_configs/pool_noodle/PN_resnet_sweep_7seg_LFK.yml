@@ -1,4 +1,4 @@
-name: resnet_sweep_7seg_LFK
+name: PN_resnet_sweep_7seg_LFK
 method: random
 metric:
   goal: minimize
@@ -8,7 +8,7 @@ parameters:
   n_seg: 
     value: 7
   DLO:
-    value: aluminum-rod
+    value: pool-noodle
 
   # Dataset
   train_trajs: 
@@ -110,6 +110,6 @@ parameters:
 
   # Cost function weights
   q_rfem_l2: 
-    value: 1.0 
+    value: 0.5
   dq_rfem_l2: 
-    value: 0.1
+    value: 0.05

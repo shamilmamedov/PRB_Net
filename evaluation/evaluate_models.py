@@ -217,6 +217,7 @@ def visualize_rfem_motion(n_seg: int = 7, dyn_model: str = 'rnn', x_rollout: int
     # Do inference
     X_rnns, Y_preds = evaluate_models(trained_models, test_data, output_scalar=None)
 
+    # Get rfem description
     trained_models[0].decoder._update_rfem_params()
     learned_rfem_params = trained_models[0].decoder.rfem_params
     pin_dlo_model, pin_dlo_geom_model = models.create_rfem_pinocchio_model(
@@ -240,35 +241,50 @@ def visualize_rfem_motion(n_seg: int = 7, dyn_model: str = 'rnn', x_rollout: int
     #     visualize_robot(np.asarray(q), 0.004, 4, pin_dlo_model, pin_dlo_geom_model)
 
 
-def how_rfem_regularization_affects_dlo_shape():
-    n_seg = 7
-    dyn_type = 'rnn'
-    reg = '_1reg'
-    config_names = [f'{dyn_type}_{n_seg}seg_FFK{reg}.yml']
+def how_rfem_regularization_affects_dlo_shape(
+        dlo: str = 'pool_noodle',
+        n_seg: int = 7,
+        dyn_model: str = 'rnn',
+):
+    reg = '0.5reg'
+    config_names = [f'{dlo}/PN_{dyn_model}_{n_seg}seg_LFK_{reg}.yml']
+    # config_names = [f'{dlo}/PN_{dyn_model}_{n_seg}seg_LFK.yml']
     configs = get_models_configs(config_names)
     trained_models = get_trained_models(configs)
 
     # Get data
     train_data = get_data_used_for_training(configs[0])
-    rollout_length = configs[0]['rollout_length']
-    n_test_trajs = [17]
+    train_rollout_length = configs[0]['rollout_length']
+    test_rollout_length = 1*train_rollout_length
+    n_test_trajs = configs[0]['test_trajs']
     test_trajs = data_pp.load_trajs(n_test_trajs)
     test_data = data_pp.construct_test_dataset_from_trajs(
-        test_trajs, 1*rollout_length, train_data, 'sliding', scale_outputs=False
+        test_trajs, test_rollout_length, train_data, 'sliding', scale_outputs=False
     )
 
     # Do inference
-    X_rnns, Y_preds = evaluate_models(trained_models, test_data, output_scalar=None)
+    X, Y_preds = evaluate_models(trained_models, test_data)
 
+    # Compute position prediction error
+    pos_error_mean_l2_norm = compute_mean_l2_norm_of_pos_prediction_error(test_data.Y, Y_preds)
+    vel_error_mean_l2_norm = compute_mean_l2_norm_of_vel_prediction_error(test_data.Y, Y_preds)
+    print(f"pos error: {pos_error_mean_l2_norm}")
+    print(f"vel error: {vel_error_mean_l2_norm}")
+
+    # Get rfem description
+    trained_models[0].decoder._update_rfem_params()
+    learned_rfem_params = trained_models[0].decoder.rfem_params
     pin_dlo_model, pin_dlo_geom_model = models.create_rfem_pinocchio_model(
-        trained_models[0].decoder.rfem_params, add_ee_ref_joint=False
+        learned_rfem_params, add_ee_ref_joint=False
     )
 
-    n_window = 14
-    q_rfem, _ = jnp.hsplit(X_rnns[0][n_window], 2)
+    # Visualize DLO shape
+    n_window = 6 # 6, 7, 9
+    q_rfem, _ = jnp.hsplit(X[0][n_window], 2)
     q_b, _ = jnp.hsplit(test_data.U_decoder[n_window], 2)
     q = jnp.hstack((q_b, q_rfem))
-    for k in range(0, rollout_length, 62):
+    # visualize_robot(np.asarray(q), 0.004, 3, pin_dlo_model, pin_dlo_geom_model)
+    for k in range(5, test_rollout_length, 60):
         q_ = jnp.tile(q[[k],:], (1000, 1))
         visualize_robot(np.asarray(q_), 0.004, 1, pin_dlo_model, pin_dlo_geom_model)
 
@@ -376,9 +392,9 @@ if __name__ == "__main__":
     # main()
     # how_nseg_affects_predictions(save_fig=True)
     # plot_hidden_rfem_state_evolution()
-    performance_on_different_rollout_lengths()
+    # performance_on_different_rollout_lengths()
     # analyse_encoder()
     # visualize_rfem_motion()
     # plot_output_prediction(save_fig=False)
-    # how_rfem_regularization_affects_dlo_shape()
+    how_rfem_regularization_affects_dlo_shape()
     # compute_inference_time()

@@ -58,5 +58,5 @@ polynomial_power: 0
 weight_decay: 0.01
 
 # Loss function
-q_rfem_l2: 1.0
-dq_rfem_l2: 0.1
+q_rfem_l2: 0.5
+dq_rfem_l2: 0.05

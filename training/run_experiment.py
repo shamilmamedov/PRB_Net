@@ -383,7 +383,7 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
         if config['decoder']['type'] == 'TrainableFKDecoder':
             print(f'\t qb offset = {model.decoder.qb_offset[:3]}')
 
-        if avg_mse_ > 1000:
+        if avg_mse_ > 5000:
             break
         
         if avg_rmse_ < best_avg_val_rmse:
