@@ -384,8 +384,8 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
             print(f'\t phib offset = {model.decoder.qb_offset[3:]}')
             print(f'\t pe_marker = {model.decoder.p_marker.T}')
 
-        if avg_mse_ > 5000:
-            break
+        #if avg_mse_ > 5000:
+        #    break
         
         if avg_rmse_ < best_avg_val_rmse:
             best_avg_val_rmse = avg_rmse_

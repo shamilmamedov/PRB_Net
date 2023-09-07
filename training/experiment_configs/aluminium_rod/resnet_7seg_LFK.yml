@@ -42,13 +42,13 @@ test_trajs:
 data_seed: 812
 batch_size: 64
 rollout_length: 250
-n_epochs: 25
+n_epochs: 40
 
 # Rollout legnth scheduler
 rollout_length_scheduler:
   init_value: 0.1
   boundaries:
-    - 12
+    - 10
   scales:
     - 10
 
@@ -56,10 +56,11 @@ rollout_length_scheduler:
 optimizer: adamw # rmsprop sgd
 learning_rate_scheduler: polynomial 
 initial_learning_rate: 0.002
+transition_epochs: 25
 final_learning_rate: 0.00001
 polynomial_power: 1.0
 weight_decay: 0.01
 
 # Cost function weights
-q_rfem_l2: 0.1
-dq_rfem_l2: 0.01
+q_rfem_l2: 1.0
+dq_rfem_l2: 0.1
