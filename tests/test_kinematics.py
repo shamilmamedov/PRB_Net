@@ -17,7 +17,11 @@ from FEIN.utils.kinematics import Trans2Rp, JointType
 
 N_TESTS = 50
 N_SEGS = [2, 4, 6]
-P_markers = [0.3, 1.0, 2.42]
+P_markers = [
+    jnp.array([[0.3, 0., 0.]]).T,
+    jnp.array([[1.0, 0., 0.]]).T,
+    jnp.array([[2.42, 0., 0.]]).T
+]
 BASE_JOINT_TYPES = [JointType.U_ZY, JointType.P_XYZ, JointType.FREE]
 
 def test_fwd_kinematics_rfem():

@@ -127,11 +127,11 @@ def create_rfem_pinocchio_model(rfem_params: RFEMParameters, add_ee_ref_joint: b
 
     fparents = rfem.compute_marker_frames_parent_joints(rfe_lengths, p_markers)
     fplacements = rfem.compute_marker_frames_placements(rfe_lengths, fparents, p_markers)
-    for k, (pj_idx, lxf) in enumerate(zip(fparents, fplacements)):
+    for k, (pj_idx, f_pos) in enumerate(zip(fparents, fplacements)):
         # Attach frame in the middle of the link
         frame_name = 'marker_' + str(k+1)
         frame_placement = pin.SE3.Identity()
-        frame_placement.translation[0] = lxf
+        frame_placement.translation = np.array(f_pos)
         frame = pin.Frame(frame_name, jids[pj_idx], jids[pj_idx], frame_placement, pin.FrameType.OP_FRAME)
         model.addFrame(frame)
 
@@ -149,25 +149,6 @@ def create_rfem_pinocchio_model(rfem_params: RFEMParameters, add_ee_ref_joint: b
 
         geom_name = "ee_ref"
         shape = fcl.Sphere(0.01)
-        shape_placement = pin.SE3.Identity()
-        geom_obj = pin.GeometryObject(geom_name, joint_id, shape, shape_placement)
-        geom_obj.meshColor = np.array([1.,0.1,0.1,1.])
-        geom_model.addGeometryObject(geom_obj)
-
-
-        joint_name = 'ee_NN_joint'
-        joint_id = model.addJoint(
-            0,
-            pin.JointModelTranslation(),
-            pin.SE3.Identity(),
-            joint_name
-        )
-
-        body_inertia = pin.Inertia.Zero()
-        model.appendBodyToJoint(joint_id, body_inertia, pin.SE3.Identity())
-
-        geom_name = "ee_NN"
-        shape = fcl.Box(0.02, 0.02, 0.02)
         shape_placement = pin.SE3.Identity()
         geom_obj = pin.GeometryObject(geom_name, joint_id, shape, shape_placement)
         geom_obj.meshColor = np.array([1.,0.1,0.1,1.])
@@ -243,17 +224,16 @@ def create_rfem_custom_model(rfem_params: RFEMParameters):
     jnqs = [jutils.JOINTTYPE_TO_NQ[x] for x in jtypes]
 
     jlxs = rfem.compute_sde_joint_placements(rfem_params.lengths, frame = 'parent')
-    jplacements = ([{'T': jutils.Rp2Trans(jnp.eye(3), jnp.array([[jlxs[0], 0., 0.]]).T)}] + # from base to first joint
-        [{'T': jutils.Rp2Trans(jnp.eye(3), jnp.array([[lxk, 0., 0.]]).T)} for lxk in jlxs[1:]]
+    jplacements = ([{'T': jutils.Rp2Trans(jnp.eye(3), jlxs[0])}] + # from base to first joint
+        [{'T': jutils.Rp2Trans(jnp.eye(3), jp_k)} for jp_k in jlxs[1:]]
     )
-
     inertias = [{'I': jutils.inertia_at_joint(R_ab=jnp.eye(3), p_ba=rck, m=mk, I_b=Ik)}
                 for mk, rck, Ik in zip(rfe_m, rfe_rc, rfe_I)]
 
     # Describe frames which correspond to sensor placements
     fparents = rfem.compute_marker_frames_parent_joints(rfem_params.lengths, p_markers)
     flxs = rfem.compute_marker_frames_placements(rfem_params.lengths, fparents, p_markers)
-    fplacements = [{'T': jutils.Rp2Trans(jnp.eye(3), jnp.array([[lxk, 0., 0.]]).T)} for lxk in flxs]
+    fplacements = [{'T': jutils.Rp2Trans(jnp.eye(3), fp_k)} for fp_k in flxs]
 
     # Descriptive params
     n_bodies = n_seg+1

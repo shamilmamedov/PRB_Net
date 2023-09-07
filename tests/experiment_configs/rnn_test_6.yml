@@ -1,4 +1,4 @@
-name: rnn_test_6
+name: rnn_test_6_pool_noodle_LFK
 n_seg: 7
 DLO: pool-noodle
 

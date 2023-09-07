@@ -30,7 +30,8 @@ def test_compute_sde_joint_placements():
 
     jpositions = rfem.compute_sde_joint_placements(rfe_lengths, frame='parent')
     assert len(jpositions) == n_seg + 1
-    
+    for k, jp_k in enumerate(jpositions):
+        jnp.allclose(jp_k, jnp.array([[rfe_lengths[k], 0., 0.]]).T)
 
 
 # unit test for compute_marker_frames_parent_joints
