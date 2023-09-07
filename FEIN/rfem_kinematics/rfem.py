@@ -29,28 +29,20 @@ def compute_rfe_lengths(L: float, n_seg: int) -> List[float]:
 
 
 def compute_sde_joint_placements(rfe_lengths: list, frame: str = 'base'):
-    """ Computes passive spring-damper elemnts 
-
-    :param L: link length
-    :param n_seg: number of segments
-    :param frame: frame at which to calculate the placement
-                  base = wrt the beginning of the link
-                  parent = wrt to the parent joint
-    
-    :return: a list with X-position of the placmenet, Y- 
-             and Z- are assumed to be zero
-    """
-    assert frame in ['base', 'parent']
-
     if frame == 'parent':
-        return jnp.concatenate((jnp.array([0.]), rfe_lengths[:-1]))
-    else:
+        jpositions = jnp.zeros((len(rfe_lengths),3, 1))
+        for i, lk in enumerate(rfe_lengths[:-1]):
+            jpositions = jpositions.at[i+1,0,0].set(lk)
+        return jpositions
+    elif frame == 'base':
+        jpositions = jnp.zeros((len(rfe_lengths),3, 1))
         jpk = 0.
-        jpositions = [jpk]
-        for lk in rfe_lengths[:-1]:
+        for i, lk in enumerate(rfe_lengths[:-1]):
             jpk += lk
-            jpositions.append(jpk)
-        return jnp.array(jpositions)
+            jpositions = jpositions.at[i+1,0,0].set(jpk)
+        return jpositions
+    else:
+        raise ValueError(f'Unknown frame {frame}')
 
 
 def compute_marker_frames_parent_joints(rfe_lengths: List, p_markers: List):
@@ -61,11 +53,11 @@ def compute_marker_frames_parent_joints(rfe_lengths: List, p_markers: List):
     :param n_seg: number of segments
     """
     jpositions = compute_sde_joint_placements(rfe_lengths, frame='base')
-    jpositions = jnp.array(jpositions)
+    jpositions_norm = jnp.linalg.norm(jpositions, axis=1)
 
     mparents = []
     for pk in p_markers:
-        delta = pk - jpositions
+        delta = jnp.linalg.norm(pk) - jpositions_norm
         parent = jnp.argmin(jnp.where(delta > 0, delta, jnp.inf))
         mparents.append(parent)
 
@@ -82,10 +74,10 @@ def compute_marker_frames_placements(rfe_lengths: List, mparents: List, p_marker
     :param n_seg: number of segments
     """
     jpositions = compute_sde_joint_placements(rfe_lengths, frame='base')
-    mplacements = []
-    for pos_mk, par_mk in zip(p_markers, mparents):
-        mplacements.append(pos_mk - jpositions[par_mk])
-    return jnp.array(mplacements)
+    mplacements = jnp.zeros((len(p_markers), 3, 1))
+    for k, (pos_mk, par_mk) in enumerate(zip(p_markers, mparents)):
+        mplacements = mplacements.at[k].set(pos_mk - jpositions[par_mk])
+    return mplacements
 
 
 def compute_rfe_inertial_parameters(n_seg: int, dlo_params: DLOParameters):

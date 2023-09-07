@@ -53,8 +53,8 @@ def fwd_velocity_kinematics(model: RobotDescription, q: jnp.ndarray, dq: jnp.nda
         q_idxs.append(jnp.arange(k,k+nq))
         k += nq
 
-    Vj = []
-    o_T_j = dict() 
+    Vj = jnp.zeros((len(q_idxs), 6, 1))
+    o_T_j = jnp.zeros((len(q_idxs), 4, 4))
     Tj, S, dS = zip(*[jutils.jcalc_jax(jti, q[qi_idxs], dq[qi_idxs]) 
                       for jti, qi_idxs in zip(model.jtypes, q_idxs)])
     for i, qi_idxs in enumerate(q_idxs):
@@ -69,14 +69,18 @@ def fwd_velocity_kinematics(model: RobotDescription, q: jnp.ndarray, dq: jnp.nda
 
         # Describe i-th joint frame in 0-frame
         if model.jparents[i] != -1:
-            o_T_j[i] = lax.dot(o_T_j[model.jparents[i]], T_λi)
+            o_T_j = o_T_j.at[i].set(
+                lax.dot(o_T_j[model.jparents[i]], T_λi)
+            )
         else:
-            o_T_j[i] = T_λi
+            o_T_j = o_T_j.at[i].set(T_λi)
 
         Ad_T_iλ = jutils.Adjoint(jutils.TransInv(T_λi))
 
         # Velocity and acceleration of i-th body
-        Vj.append(lax.dot(Ad_T_iλ, V_λ) + lax.dot(S[i], dq[qi_idxs]))
+        Vj = Vj.at[i].set(
+            lax.dot(Ad_T_iλ, V_λ) + lax.dot(S[i], dq[qi_idxs])
+        )
 
     Vf = dict()
     o_Vf = dict()
@@ -140,13 +144,14 @@ def fwd_joint_position_and_velocity_kinematics(
 def compute_markers_positions_and_velocities(model, q, dq):
     o_T_j, Vj = fwd_joint_position_and_velocity_kinematics(model, q, dq)
 
-    p_markers = []
+    p_markers = jnp.zeros((model.n_frames, 3, 1))
     for k in range(model.n_frames):
         Tk = model.fplacements[k]['T']
         o_T_f = jnp.dot(o_T_j[model.fparents[k]], Tk)
-        p_markers.append(jutils.Trans2Rp(o_T_f)[1].T)
+        pm_k = jutils.Trans2Rp(o_T_f)[1]
+        p_markers = p_markers.at[k].set(pm_k)
 
-    dp_markers = []
+    dp_markers = jnp.zeros((model.n_frames, 3, 1))
     for k in range(model.n_frames):
         V_parent_joint = Vj[model.fparents[k]]
         
@@ -157,8 +162,9 @@ def compute_markers_positions_and_velocities(model, q, dq):
         o_R_f = jutils.Trans2Rp(o_T_f)[0]
 
         o_Vf = lax.dot(jax.scipy.linalg.block_diag(o_R_f, o_R_f), Vf)
-        dp_markers.append(o_Vf[3:,:].T)
-    return jnp.vstack(p_markers), jnp.vstack(dp_markers)
+
+        dp_markers = dp_markers.at[k].set(o_Vf[3:,:])
+    return p_markers.squeeze(), dp_markers.squeeze()
 
 
 def compute_markers_positions(model, q):

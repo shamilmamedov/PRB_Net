@@ -123,8 +123,9 @@ def get_decoder(dec_configs, dlo, n_seg, key):
 
         bjoint = kin_utils.JointType.FREE
         dlo_params = rfem_models.load_dlo_params_from_yaml(dlo_phys_params_path)
-        p_markers = data_utils.load_vicon_marker_locations(marker_pos_path)
-        dec_params = rfem_models.RFEMParameters(n_seg, dlo_params, bjoint, [p_markers['p_be']])
+        px_markers = data_utils.load_vicon_marker_locations(marker_pos_path)
+        pe_marker = jnp.array([[px_markers['p_be'], 0., 0.]]).T
+        dec_params = rfem_models.RFEMParameters(n_seg, dlo_params, bjoint, [pe_marker])
         if dec_configs['type'] == 'FK':
             return decoders.FKDecoder(dec_params)
         else:
@@ -345,9 +346,7 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
             
         avg_loss_ = sum(epoch_train_loss) / steps_per_epoch
         avg_lr_ = sum(lr_epoch) / steps_per_epoch
-        print(f"Epoch={epoch + 1}, loss={avg_loss_:.5f}")
-        print(f"\t lr = {avg_lr_:.5f}")
-       
+        print(f"Epoch={epoch + 1}, train loss = {avg_loss_:.5f}, lr = {avg_lr_:.5f}")
 
 	    # Compute test set metrics
         len_val_data = len(val_data.Y)
@@ -376,12 +375,14 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
         avg_rmse_ = sum(rmse_) / len(rmse_)
         avg_mae_ =  sum(mae_) / len(mae_)
         avg_mse_ = sum(mse_) / len(mse_)
-        print(f"\t loss on val data = {avg_tes_loss_:.5f}")
-        print(f"\t mae on val data = {avg_mae_:.5f}")
-        print(f"\t rmse on val data = {avg_rmse_:.5f}")
-        print(f"\t mse enc-dyn on val data = {avg_mse_:.5f}")
+        print(f"\t val loss = {avg_tes_loss_:.4f}")
+        print(f"\t val mae = {avg_mae_:.4f}")
+        print(f"\t val rmse = {avg_rmse_:.4f}")
+        print(f"\t val mse Xenc-Xdyn = {avg_mse_:.4f}")
         if config['decoder']['type'] == 'TrainableFKDecoder':
-            print(f'\t qb offset = {model.decoder.qb_offset[:3]}')
+            print(f'\t pb offset = {model.decoder.qb_offset[:3]}')
+            print(f'\t phib offset = {model.decoder.qb_offset[3:]}')
+            print(f'\t pe_marker = {model.decoder.p_marker.T}')
 
         if avg_mse_ > 5000:
             break

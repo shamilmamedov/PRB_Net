@@ -11,7 +11,7 @@ import training.preprocess_data as data_prpr
 
 
 # rnn_test_configs = [f'tests/experiment_configs/rnn_test_{k}.yml' for k in range(1, 7)]
-rnn_test_configs = ['tests/experiment_configs/rnn_test_6.yml']
+rnn_test_configs = ['tests/experiment_configs/rnn_test_3.yml']
 
 resnet_test_configs = ['tests/experiment_configs/resnet_test_1.yml',
                        'tests/experiment_configs/resnet_test_2.yml']
