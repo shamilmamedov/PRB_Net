@@ -313,9 +313,9 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
     # Parse loss weights
     alpha_q_rfem = config['q_rfem_l2']
     alpha_dq_rfem = config['dq_rfem_l2']
-    alpha_p_b = 0.5
+    alpha_p_b = 1.0
     alpha_phi_b = 0.1
-    alpha_rfem_length = 0.025
+    alpha_rfem_length = 0.02
     alpha_dlo_length = 1.
     alpha_p_marker = 0.5
     w_y = jnp.array([2., 2., 2., 1., 1., 1.])
