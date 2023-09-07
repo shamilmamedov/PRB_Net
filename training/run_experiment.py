@@ -314,7 +314,7 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
     alpha_dq_rfem = config['dq_rfem_l2']
     alpha_p_b = 0.5
     alpha_phi_b = 0.1
-    alpha_rfem_length = 0.05
+    alpha_rfem_length = 0.025
     alpha_dlo_length = 1.
     alpha_p_marker = 0.5
     w_y = jnp.array([2., 2., 2., 1., 1., 1.])
