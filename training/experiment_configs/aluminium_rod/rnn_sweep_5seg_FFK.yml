@@ -1,0 +1,98 @@
+name: rnn_sweep_5seg_FFK
+method: random
+description: 'Model with physics-informed NN encoder, RNN dynamics and fixed FK decoder'
+metric:
+  goal: minimize
+  name: loss_val
+
+parameters:
+  n_seg: 
+    value: 5
+
+  # Dataset
+  train_trajs: 
+    value:
+      - 2
+      - 4
+      - 6
+      - 9
+      - 14
+      - 15
+      - 16
+      - 18
+      - 19
+
+  data_seed:
+    value: 812
+  batch_size:
+    value: 64
+  rollout_length:
+    value: 250
+  n_epochs:
+    value: 25
+  
+  # Dynamics
+  model_seed:
+    values:
+      - 42
+      - 150
+      - 111
+      - 999
+
+  encoder:
+    parameters:
+      type: 
+        value: PINN
+      width:
+        values:
+          - 32
+          - 64
+      depth:
+        values:
+          - 2
+          - 3
+      activation:
+        value: tanh
+
+  dynamics:
+    parameters:
+      type: 
+        value: RNN
+      n_u: 
+        value: 18
+
+  decoder:
+    parameters:
+      type: 
+        value: FK
+      n_y: 
+        value: 6
+
+  # Optimizer
+  optimizer: 
+    value: adamw
+  learning_rate_scheduler:
+    value: polynomial
+  transition_epochs: 
+    value: 25
+  initial_learning_rate:
+    values:
+      - 0.001
+      - 0.002
+      - 0.005
+  final_learning_rate:
+    value: 1.E-4 
+  polynomial_power:
+    values:
+      - 0.0
+      - 0.5
+      - 1.0
+  weight_decay:
+    values:
+      - 0.0001
+      - 0.001
+
+  q_rfem_l2:
+    value: 0.1
+  dq_rfem_l2:
+    value: 0.01
