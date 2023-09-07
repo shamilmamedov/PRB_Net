@@ -21,15 +21,15 @@ decoder:
 # Dataset
 train_trajs:
   - 1
+  - 2
   - 3
   - 5
   - 6
   - 7
-  - 8
 val_trajs: 
   - 4
 test_trajs: 
-  - 2
+  - 8
 
 data_seed: 812
 batch_size: 64

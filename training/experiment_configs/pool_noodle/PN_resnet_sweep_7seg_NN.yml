@@ -11,17 +11,17 @@ parameters:
     value: pool-noodle
 
   # Dataset
-  train_trajs:
+  train_trajs: 
     value:
       - 1
-      - 4
+      - 2
+      - 3
+      - 5
       - 6
-      - 9
-      - 13
-      - 14
-      - 16
-      - 18
-      - 19
+      - 7
+  val_trajs:
+    value:
+      - 4
 
   data_seed:
     value: 812

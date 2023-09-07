@@ -32,8 +32,24 @@ def main(n_trajs, dlo: str = 'aluminium-rod'):
     plt.show()
 
 
+
+def plot_range_of_motion(trajs, dlo: str = 'aluminium-rod'):
+    trajs = load_trajs(n_trajs, dlo)
+
+    fig, axs = plt.subplots(3,1, sharex=True)
+    axs.reshape(-1,1)
+    for k, ax in enumerate(axs):
+        for n_traj, traj in zip(n_trajs, trajs):
+            ax.plot(traj.t, traj.p_e[:,k], label=f'traj {n_traj}')
+        ax.legend(ncol=2)
+        ax.grid()
+    plt.tight_layout()
+    plt.show()
+
+
 if __name__ == '__main__':
     dlo = 'pool-noodle'
     # n_trajs = [2,4,6,14,16,19]
     n_trajs = [k for k in range(1,9)]
     main(n_trajs)
+    plot_range_of_motion(n_trajs, dlo)

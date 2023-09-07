@@ -25,15 +25,15 @@ decoder:
 # Dataset
 train_trajs:
   - 1
+  - 2
   - 3
   - 5
   - 6
   - 7
-  - 8
 val_trajs: 
   - 4
 test_trajs: 
-  - 2
+  - 8
 
 data_seed: 812
 batch_size: 64
@@ -58,5 +58,5 @@ polynomial_power: 0
 weight_decay: 0.01
 
 # Loss function
-q_rfem_l2: 0.5
-dq_rfem_l2: 0.05
+q_rfem_l2: 0.4
+dq_rfem_l2: 0.08

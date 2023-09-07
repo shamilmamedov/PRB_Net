@@ -185,7 +185,7 @@ def how_nseg_affects_predictions(save_fig: bool = False):
 def performance_on_different_rollout_lengths(
         dlo: str = 'pool_noodle',
         n_seg: int = 7,
-        dyn_model: str = 'node',
+        dyn_model: str = 'rnn',
         x_rollout: int = 1
 ):
     # config_names = ([f'{dyn_model}_{n_seg}seg_NN.yml',
@@ -295,9 +295,10 @@ def how_rfem_regularization_affects_dlo_shape(
     # Get data
     train_data = get_data_used_for_training(configs[0])
     train_rollout_length = configs[0]['rollout_length']
-    test_rollout_length = 1*train_rollout_length
-    n_test_trajs = configs[0]['test_trajs']
-    test_trajs = data_pp.load_trajs(n_test_trajs)
+    test_rollout_length = 10*train_rollout_length
+    # n_test_trajs = configs[0]['test_trajs']
+    n_test_trajs = [6]
+    test_trajs = data_utils.load_trajs(n_test_trajs, configs[0]['DLO'])
     test_data = data_pp.construct_test_dataset_from_trajs(
         test_trajs, test_rollout_length, train_data, 'sliding', scale_outputs=False
     )
@@ -319,14 +320,15 @@ def how_rfem_regularization_affects_dlo_shape(
     )
 
     # Visualize DLO shape
-    n_window = 6 # 6, 7, 9
-    q_rfem, _ = jnp.hsplit(X[0][n_window], 2)
-    q_b, _ = jnp.hsplit(test_data.U_decoder[n_window], 2)
-    q = jnp.hstack((q_b, q_rfem))
-    # visualize_robot(np.asarray(q), 0.004, 3, pin_dlo_model, pin_dlo_geom_model)
-    for k in range(5, test_rollout_length, 60):
-        q_ = jnp.tile(q[[k],:], (1000, 1))
-        visualize_robot(np.asarray(q_), 0.004, 1, pin_dlo_model, pin_dlo_geom_model)
+    # n_window = 6 # 6, 7, 9
+    for n_window in range(0, len(test_data.Y)) :
+        q_rfem, _ = jnp.hsplit(X[0][n_window], 2)
+        q_b, _ = jnp.hsplit(test_data.U_decoder[n_window], 2)
+        q = jnp.hstack((q_b, q_rfem))
+        visualize_robot(np.asarray(q), 0.004, 3, pin_dlo_model, pin_dlo_geom_model)
+    # for k in range(5, test_rollout_length, 60):
+    #     q_ = jnp.tile(q[[k],:], (1000, 1))
+    #     visualize_robot(np.asarray(q_), 0.004, 1, pin_dlo_model, pin_dlo_geom_model)
 
 
 def plot_output_prediction(save_fig: False, x_rollout: int = 10):
@@ -432,9 +434,9 @@ if __name__ == "__main__":
     # main()
     # how_nseg_affects_predictions(save_fig=True)
     # plot_hidden_rfem_state_evolution()
-    performance_on_different_rollout_lengths()
+    # performance_on_different_rollout_lengths()
     # analyse_encoder()
     # visualize_rfem_motion()
     # plot_output_prediction(save_fig=False)
-    # how_rfem_regularization_affects_dlo_shape()
+    how_rfem_regularization_affects_dlo_shape()
     # compute_inference_time()
