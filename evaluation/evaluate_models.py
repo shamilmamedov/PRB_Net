@@ -183,17 +183,18 @@ def how_nseg_affects_predictions(save_fig: bool = False):
 
 
 def performance_on_different_rollout_lengths(
-        dlo: str = 'pool_noodle',
+        dlo: str = 'aluminium_rod',# 'pool_noodle',
         n_seg: int = 7,
-        dyn_model: str = 'rnn',
+        dyn_model: str = 'node',
         x_rollout: int = 1
 ):
     # config_names = ([f'{dyn_model}_{n_seg}seg_NN.yml',
     #                 f'{dyn_model}_{n_seg}seg_FFK.yml',
     #                 f'{dyn_model}_{n_seg}seg_LFK.yml'])
     # config_names = [f'PN_{dyn_model}_{n_seg}seg_LFK.yml']
-    config_names = [f'{dlo}/PN_{dyn_model}_{n_seg}seg_LFK.yml',
-                    f'{dlo}/PN_{dyn_model}_{n_seg}seg_NN.yml']
+    # config_names = [f'{dlo}/PN_{dyn_model}_{n_seg}seg_LFK.yml',
+    #                 f'{dlo}/PN_{dyn_model}_{n_seg}seg_NN.yml']
+    config_names = [f'{dlo}/{dyn_model}_{n_seg}seg_NN.yml']
     configs = get_models_configs(config_names)
     trained_models = get_trained_models(configs)
 
@@ -202,7 +203,7 @@ def performance_on_different_rollout_lengths(
     train_rollout_length = configs[0]['rollout_length']
     test_rollout_length = x_rollout * train_rollout_length
     n_test_trajs = configs[0]['test_trajs']
-    test_trajs = data_utils.load_trajs(n_test_trajs, 'pool-noodle')
+    test_trajs = data_utils.load_trajs(n_test_trajs, configs[0]['DLO'])
     test_data = data_pp.construct_test_dataset_from_trajs(
         test_trajs, test_rollout_length, train_data, 'sliding', scale_outputs=False
     )

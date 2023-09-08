@@ -4,11 +4,11 @@ DLO: pool-noodle
 
 # Dataset
 train_trajs: 
-  - 8
+  - 7
 val_trajs: 
   - 4
 test_trajs: 
-  - 2
+  - 8
 
 data_seed: 812
 batch_size: 64

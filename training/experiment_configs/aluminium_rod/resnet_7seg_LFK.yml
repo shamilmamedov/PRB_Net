@@ -14,7 +14,7 @@ dynamics:
   type: ResNet
   n_u: 18
   width: 256
-  depth: 3
+  depth: 2
   activation: tanh
 
 decoder:

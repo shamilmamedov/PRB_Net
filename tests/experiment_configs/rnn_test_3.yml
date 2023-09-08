@@ -5,6 +5,8 @@ DLO: aluminium-rod
 # Dataset
 train_trajs:
   - 19
+test_trajs:
+  - 17
 
 data_seed: 812
 batch_size: 64

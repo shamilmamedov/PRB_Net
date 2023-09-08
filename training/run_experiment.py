@@ -148,7 +148,7 @@ def get_model(configs):
 def get_optimizer(configs, steps_per_epoch):
     @optax.inject_hyperparams
     def set_learning_rate(learning_rate):
-        if opt_name == 'adamw':
+        if opt_name in ['adamw', 'lion']:
             wd = configs['weight_decay']
             return optimizer_fcn(learning_rate=learning_rate, weight_decay=wd)
         else:
@@ -159,7 +159,8 @@ def get_optimizer(configs, steps_per_epoch):
         'adamw': optax.adamw,
         'rmsprop': optax.rmsprop,
         'sgd': optax.sgd,
-        'adabelief': optax.adabelief
+        'adabelief': optax.adabelief,
+        'lion': optax.lion
     }
     transition_epochs = configs['transition_epochs']
     lr_init = configs['initial_learning_rate']
@@ -228,7 +229,6 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
         output_prediction_loss_dyn = nn_utils.weighted_mse_loss(
             Y, Y_pred_dyn_scaled, w_y, w_t[:Y.shape[1],:]
         )
-        
         try: 
             act_ = jnp.sum(model.decoder.rfem_lengths_sqrt**2) - model.decoder.rod_length
             length_loss = nn_utils.l2_loss(act_, alpha_dlo_length)
@@ -237,12 +237,8 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
 
             delta_marker_pos = p_marker_calibration - model.decoder.p_marker
             marker_pos_loss = nn_utils.l2_loss(delta_marker_pos, alpha_p_marker)
-
-            qb_offset_loss = (nn_utils.l2_loss(model.decoder.qb_offset[:3], alpha_p_b) + 
-                              nn_utils.l2_loss(model.decoder.qb_offset[3:], alpha_phi_b))
         except AttributeError:
             length_loss = 0.
-            qb_offset_loss = 0.
             rfem_legth_loss = 0.
             marker_pos_loss = 0.
 
@@ -250,7 +246,7 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
         q_rfem_loss_dyn = nn_utils.l2_loss(X_dyn[:,:,:n_q], alpha_q_rfem)
         dq_rfem_loss_dyn = nn_utils.l2_loss(X_dyn[:,:,n_q:], alpha_dq_rfem) 
         loss = (output_prediction_loss_dyn + q_rfem_loss_dyn + dq_rfem_loss_dyn + 
-                length_loss + qb_offset_loss + rfem_legth_loss + marker_pos_loss)
+                length_loss + rfem_legth_loss + marker_pos_loss)
         return loss
     
 
@@ -311,13 +307,11 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
 
 
     # Parse loss weights
-    alpha_q_rfem = config['q_rfem_l2']
-    alpha_dq_rfem = config['dq_rfem_l2']
-    alpha_p_b = 1.0
-    alpha_phi_b = 0.1
-    alpha_rfem_length = 0.02
     alpha_dlo_length = 1.
     alpha_p_marker = 0.5
+    alpha_rfem_length = 0.02
+    alpha_q_rfem = config['q_rfem_l2']
+    alpha_dq_rfem = config['dq_rfem_l2']
     w_y = jnp.array([2., 2., 2., 1., 1., 1.])
     w_t = jnp.ones((rollout_length+1,1))
     w_t = w_t.at[jnp.array([0,1,2,3,4])].set(jnp.array([[5,4,3,2,1]]).T)
@@ -380,8 +374,6 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
         print(f"\t val rmse = {avg_rmse_:.4f}")
         print(f"\t val mse Xenc-Xdyn = {avg_mse_:.4f}")
         if config['decoder']['type'] == 'TrainableFKDecoder':
-            print(f'\t pb offset = {model.decoder.qb_offset[:3]}')
-            print(f'\t phib offset = {model.decoder.qb_offset[3:]}')
             print(f'\t pe_marker = {model.decoder.p_marker.T}')
 
         #if avg_mse_ > 5000:
@@ -401,6 +393,20 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
             'mse_enc_dyn_val': avg_mse_
         }
         wandb.log(log_dict)
+
+    # Evaluate best model on test set
+    print('\nPerformance on test data:')
+    test_trajs = data_utils.load_trajs(config['test_trajs'], config['DLO'])
+    test_data = data_prpr.construct_test_dataset_from_trajs(
+        test_trajs, rollout_length, train_data, 'sliding', scale_outputs=False
+    )
+    X_test, Y_test = jax.vmap(best_model)(
+        test_data.U_encoder[:,0,:], test_data.U_dyn, test_data.U_decoder
+    )
+    pos_error = nn_utils.mean_l2_norm(test_data.Y[:,:,:3] - Y_test[:,:,:3]).item()
+    vel_error = nn_utils.mean_l2_norm(test_data.Y[:,:,3:] - Y_test[:,:,3:]).item()
+    print(f'\tposition error = {pos_error:.4f}m')
+    print(f'\tvelocity error = {vel_error:.4f}m/s')
 
     if save_model:
         try:

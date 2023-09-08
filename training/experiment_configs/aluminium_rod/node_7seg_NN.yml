@@ -13,6 +13,10 @@ train_trajs:
   - 16
   - 18
   - 19
+test_trajs: 
+  - 2
+  - 5
+  - 17
 
 data_seed: 812
 batch_size: 64
