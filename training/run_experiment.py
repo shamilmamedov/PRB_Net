@@ -308,8 +308,8 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
 
     # Parse loss weights
     alpha_dlo_length = 1.
-    alpha_p_marker = 0.5
-    alpha_rfem_length = 0.02
+    alpha_p_marker = 0.4
+    alpha_rfem_length = 0.01
     alpha_q_rfem = config['q_rfem_l2']
     alpha_dq_rfem = config['dq_rfem_l2']
     w_y = jnp.array([2., 2., 2., 1., 1., 1.])
@@ -323,7 +323,7 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
 
     # Train model
     best_model = None
-    best_avg_val_rmse = 1000
+    best_val_rmse = 1000
     print(f'Steps per epoch: {steps_per_epoch}')
     for epoch in range(n_epochs):
         lr_epoch = [] 
@@ -379,8 +379,8 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
         #if avg_mse_ > 5000:
         #    break
         
-        if avg_rmse_ < best_avg_val_rmse:
-            best_avg_val_rmse = avg_rmse_
+        if avg_rmse_ < best_val_rmse:
+            best_val_rmse = avg_rmse_
             best_model = model    
 
         # Log required metrics to wandb
@@ -405,8 +405,17 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
     )
     pos_error = nn_utils.mean_l2_norm(test_data.Y[:,:,:3] - Y_test[:,:,:3]).item()
     vel_error = nn_utils.mean_l2_norm(test_data.Y[:,:,3:] - Y_test[:,:,3:]).item()
-    print(f'\tposition error = {pos_error:.4f}m')
-    print(f'\tvelocity error = {vel_error:.4f}m/s')
+    print(f'\tposition error best = {pos_error:.4f} m')
+    print(f'\tvelocity error best = {vel_error:.4f} m/s')
+
+    X_test, Y_test = jax.vmap(model)(
+        test_data.U_encoder[:,0,:], test_data.U_dyn, test_data.U_decoder
+    )
+    pos_error = nn_utils.mean_l2_norm(test_data.Y[:,:,:3] - Y_test[:,:,:3]).item()
+    vel_error = nn_utils.mean_l2_norm(test_data.Y[:,:,3:] - Y_test[:,:,3:]).item()
+    print(f'\tposition error last = {pos_error:.4f} m')
+    print(f'\tvelocity error last = {vel_error:.4f} m/s')
+
 
     if save_model:
         try:
