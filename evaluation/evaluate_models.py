@@ -18,18 +18,6 @@ from FEIN.rfem_kinematics import models
 from FEIN.rfem_kinematics.visualization import visualize_robot
 
 
-def compute_mean_l2_norm_of_pos_prediction_error(
-        Y_true: jnp.ndarray, 
-        Y_preds: List[jnp.ndarray]
-    ):
-    out = []
-    for Y_pred in Y_preds:
-        out.append(
-            nn_utils.mean_l2_norm(Y_true[:,:,:3] - Y_pred[:,:,:3]).item()
-        )
-    return out
-
-
 def compute_l2_norm_of_pos_prediction_error(
         Y_true: jnp.ndarray, 
         Y_preds: List[jnp.ndarray]
@@ -38,18 +26,6 @@ def compute_l2_norm_of_pos_prediction_error(
     for Y_pred in Y_preds:
         out.append(
             nn_utils.l2_norm(Y_true[:,:,:3] - Y_pred[:,:,:3]).reshape(-1)
-        )
-    return out
-
-
-def compute_mean_l2_norm_of_vel_prediction_error(
-        Y_true: jnp.ndarray, 
-        Y_preds: List[jnp.ndarray]
-    ):
-    out = []
-    for Y_pred in Y_preds:
-        out.append(
-            nn_utils.mean_l2_norm(Y_true[:,:,3:] - Y_pred[:,:,3:]).item()
         )
     return out
 
@@ -66,36 +42,32 @@ def compute_l2_norm_of_vel_prediction_error(
     return out
 
 
-def get_models_configs(config_names: List[str]) -> List[dict]:
-    # TODO check that all configs have the same train trajs
-    # otherwise scaling the test trajs is not well defined
+def get_model_configs(dlo: str, n_seg: int, dyn: str, dec: str) -> dict:
+    # Construct config file name
+    prfx = ''
+    if dlo == 'pool_noodle': prfx = 'PN_'
+    config_name = f'{dlo}/{prfx}{dyn}_{n_seg}seg_{dec}.yml'
 
+    # Construct config file path
     configs_dir = 'training/experiment_configs/'
-    experiment_configs_paths = [configs_dir + name
-                               for name in config_names]
-    # Load config files
-    configs = []
-    for config_path in experiment_configs_paths:
-        with open(config_path, 'r') as file:
-            configs.append(yaml.safe_load(file))
-    return configs
+    experiment_config_path = configs_dir + config_name
+    
+    # Load config file
+    with open(experiment_config_path, 'r') as file:
+        config = yaml.safe_load(file)
+    return config
 
 
-def get_trained_models(configs: List[dict]) -> List:
+def load_trained_model(config: dict) -> eqx.Module:
     # Load mode skeletons
-    model_pytrees = []
-    for c in configs:
-        model_pytrees.append(get_model(c))
+    model_pytree = get_model(config)
 
     # Deserialoze saved trained models
-    trained_models = []
     models_dir = 'training/saved_models/'
-    for c, m in zip(configs, model_pytrees):
-        model_path_ = models_dir + c['name'] + '.eqx'
-        trained_m = eqx.tree_deserialise_leaves(model_path_, m)
-        trained_models.append(trained_m)
+    model_path = models_dir + config['name'] + '.eqx'
+    trained_model = eqx.tree_deserialise_leaves(model_path, model_pytree)    
 
-    return trained_models
+    return trained_model
 
 
 def evaluate_models(models: List, data):
@@ -119,7 +91,7 @@ def compute_performance_metrics(Y, Y_pred_models):
     return rmse, mae
 
 
-def get_data_used_for_training(config):
+def get_data_used_for_training(config: dict) -> data_utils.DLODataset:
     rollout_length = config['rollout_length']
     data_key = jax.random.PRNGKey(config['data_seed'])
     data_key, key = jax.random.split(data_key)
@@ -140,12 +112,96 @@ def get_data_used_for_training(config):
     return train_data
 
 
+def get_test_data(config: dict, window: str, x_rollout: int) -> data_utils.DLODataset:
+    # Load train and val data to get sacalars
+    train_data = get_data_used_for_training(config)
+
+    train_rollout_length = config['rollout_length']
+    test_rollout_length = x_rollout * train_rollout_length
+    
+    n_test_trajs = config['test_trajs']
+    test_trajs = data_utils.load_trajs(n_test_trajs, config['DLO'])
+    
+    test_data = data_pp.construct_test_dataset_from_trajs(
+        test_trajs, test_rollout_length, train_data, window, scale_outputs=False
+    )
+    return test_data
+
+
+def save_predictions_to_csv(dlo: str, model:str, Y_true, Y_pred, X_pred):
+    nx = X_pred.shape[2]
+    n_seg = nx // 4
+
+    y_meas_cols = ['pe_x', 'pe_y', 'pe_z', 'dpe_x', 'dpe_y', 'dpe_z']
+    y_pred_cols = ['hat_pe_x', 'hat_pe_y', 'hat_pe_z', 'hat_dpe_x', 'hat_dpe_y', 'hat_dpe_z']
+    q_cols = [f'q_{i}' for i in range(2*n_seg)]
+    dq_cols = [f'dq_{i}' for i in range(2*n_seg)]
+    all_cols = y_meas_cols + y_pred_cols + q_cols + dq_cols
+    Y_true_all = Y_true.reshape(-1, 6)
+    Y_pred_all = Y_pred.reshape(-1, 6)
+    X_pred_all = X_pred.reshape(-1, 4*n_seg)
+    all_vals = np.hstack((Y_true_all, Y_pred_all, X_pred_all))
+
+    df = pd.DataFrame(
+        all_vals, 
+        columns=all_cols
+    )
+    df.to_csv(f'evaluation/data/{dlo}_{model}_predictions.csv', index=False)
+
+
+def load_models_predictions(dlo:str):
+    dir = 'evaluation/data/'
+    names = [
+        f'{dir}{dlo}_resnet_LFK_predictions.csv',
+        f'{dir}{dlo}_resnet_NN_predictions.csv',
+        f'{dir}{dlo}_rnn_LFK_predictions.csv',
+        f'{dir}{dlo}_rnn_NN_predictions.csv',
+        f'{dir}{dlo}_rfem_predictions.csv',
+    ]
+    dfs = [pd.read_csv(name) for name in names]
+    shortcuts = ['FEIN-ResNet', 'ResNet', 'FEIN-RNN', 'RNN', 'RFEM']
+    return dict(zip(shortcuts, dfs))
+
+
+def compare_models(dlo: str):
+    def _compute_l2_norm_of_prediction_error(df):
+        Y_true = df[['pe_x', 'pe_y', 'pe_z']].to_numpy()
+        Y_pred = df[['hat_pe_x', 'hat_pe_y', 'hat_pe_z']].to_numpy()
+
+        E = Y_true - Y_pred
+        return nn_utils.l2_norm(E[None,:,:])
+    
+    # Load models predictions
+    model_pred_dict = load_models_predictions(dlo)
+
+    # Compute prediction errors
+    l2_norms = {}
+    for k, df in model_pred_dict.items():
+        l2_norms[k] = 100*_compute_l2_norm_of_prediction_error(df)    
+
+    # Plot the violinplot using seaborn library, use log scale along y-axis
+    # take into accounbt that l2_norms is a dict of arrays 
+    sns.violinplot(data=list(l2_norms.values()), scale='count', inner='quartile')
+    # Plot the boxplot using seaborn library, use log scale along y-axis
+    # sns.boxplot(data=list(l2_norms.values()))
+    plt.xticks([0, 1, 2, 3, 4], l2_norms.keys())
+    # Put a text with the mean values on each boxplot
+    # for k, v in l2_norms.items():
+    #     plt.text(x=list(l2_norms.keys()).index(k), y=np.mean(v), s=f'{np.mean(v):.2f}')
+    # plt.ylim([0, 30])
+    plt.yscale('log')
+    plt.ylabel(r'$|p_\mathrm{e} - \hat p_\mathrm{e}|_2$ [cm]')
+    plt.grid(alpha=0.25)
+    plt.tight_layout()
+    plt.show()
+
+
 def how_nseg_affects_predictions(save_fig: bool = False):
     # Load trained models
     n_segs = [2, 5, 7, 10]
     config_names = [f'rnn_{x}seg_FFK.yml' for x in n_segs]
-    configs = get_models_configs(config_names)
-    trained_models = get_trained_models(configs)
+    configs = get_model_configs(config_names)
+    trained_models = load_trained_model(configs)
     
     # Load train and val data to get sacalars
     train_data = get_data_used_for_training(configs[0])
@@ -182,81 +238,62 @@ def how_nseg_affects_predictions(save_fig: bool = False):
         fig.savefig('CORL_figs/pred_vs_nseg.pdf', format='pdf', dpi=600, bbox_inches='tight')
 
 
-def performance_on_different_rollout_lengths(
-        dlo: str = 'aluminium_rod',# 'pool_noodle',
+def evaluate_model_performance_and_save_predictions(
+        dlo: str = 'pool_noodle',# 'pool_noodle', 'aluminium_rod'
         n_seg: int = 7,
-        dyn_model: str = 'node',
+        dynamics: str = 'rnn',
+        decoder: str = 'NN',
         x_rollout: int = 1
 ):
-    # config_names = ([f'{dyn_model}_{n_seg}seg_NN.yml',
-    #                 f'{dyn_model}_{n_seg}seg_FFK.yml',
-    #                 f'{dyn_model}_{n_seg}seg_LFK.yml'])
-    # config_names = [f'PN_{dyn_model}_{n_seg}seg_LFK.yml']
-    # config_names = [f'{dlo}/PN_{dyn_model}_{n_seg}seg_LFK.yml',
-    #                 f'{dlo}/PN_{dyn_model}_{n_seg}seg_NN.yml']
-    config_names = [f'{dlo}/{dyn_model}_{n_seg}seg_NN.yml']
-    configs = get_models_configs(config_names)
-    trained_models = get_trained_models(configs)
+    # Load trained model
+    config = get_model_configs(dlo, n_seg, dynamics, decoder)
+    trained_model = load_trained_model(config)
 
     # Load train and val data to get sacalars
-    train_data = get_data_used_for_training(configs[0])
-    train_rollout_length = configs[0]['rollout_length']
-    test_rollout_length = x_rollout * train_rollout_length
-    n_test_trajs = configs[0]['test_trajs']
-    test_trajs = data_utils.load_trajs(n_test_trajs, configs[0]['DLO'])
-    test_data = data_pp.construct_test_dataset_from_trajs(
-        test_trajs, test_rollout_length, train_data, 'sliding', scale_outputs=False
-    )
-
-    # Evaluate models
-    X, Y_preds = evaluate_models(trained_models, test_data)
+    window = 'sliding'
+    test_data = get_test_data(config, window, x_rollout)
     
-    pos_error_mean_l2_norm = compute_mean_l2_norm_of_pos_prediction_error(test_data.Y, Y_preds)
-    vel_error_mean_l2_norm = compute_mean_l2_norm_of_vel_prediction_error(test_data.Y, Y_preds)
+    # Evaluate model
+    X, Y_pred = jax.vmap(trained_model)(
+        test_data.U_encoder[:,0,:], 
+        test_data.U_dyn, 
+        test_data.U_decoder
+    )
+    
+    # Compute performance metrics
+    E = test_data.Y - Y_pred
+    pos_error_mean_l2_norm = nn_utils.mean_l2_norm(E[:,:,:3]).item()
+    vel_error_mean_l2_norm = nn_utils.mean_l2_norm(E[:,:,3:]).item()
 
-    pos_error_l2_norm = compute_l2_norm_of_pos_prediction_error(test_data.Y, Y_preds)
+    model = f'{dynamics}_{decoder}'
+    print(f"model: {model}")
+    print(f"pos error: {pos_error_mean_l2_norm:.3f}")
+    print(f"vel error: {vel_error_mean_l2_norm:.3f}")
 
-    column_names = [c['name'] for c in configs]
-    row_names = ['pos_err_norm', 'vel_err_norm']
-    df = pd.DataFrame(columns=column_names, index=row_names)
-    df.loc['pos_err_norm'] = pos_error_mean_l2_norm
-    df.loc['vel_err_norm'] = vel_error_mean_l2_norm
-    pd.set_option('display.precision', 3)
-    print(df)
+    # Save predictions to csv
+    save_predictions_to_csv(dlo, model, test_data.Y, Y_pred, X)
 
-    pos_error_l2_norm_in_cm = [100*err for err in pos_error_l2_norm]
-    # plot the violinplot using seaborn library, use log scale along y-axis
-    sns.violinplot(data=pos_error_l2_norm_in_cm)#, scale='count', inner='quartile')
-    plt.yscale('log')
-    plt.xticks([0, 1], ['LFK', 'NN'])
-    plt.ylabel(r'$|p_\mathrm{e} - \hat p_\mathrm{e}|_2$ [cm]')
-    plt.grid(alpha=0.25)
-    plt.tight_layout()
-    plt.show()
-
-
-def visualize_rfem_motion(n_seg: int = 7, dyn_model: str = 'rnn', x_rollout: int = 5):
+def visualize_rfem_motion(dlo:str = 'aluminium_rod', n_seg: int = 7, dyn_model: str = 'rnn', x_rollout: int = 5):
     # config_names = [f'{dyn_type}_{n_seg}seg_FFK.yml',
     #                 f'{dyn_type}_{n_seg}seg_NN.yml']
-    config_names = [f'PN_{dyn_model}_{n_seg}seg_LFK.yml']
-    configs = get_models_configs(config_names)
-    trained_models = get_trained_models(configs)
+    prfx = ''
+    if dlo == 'pool_noodle': prfx = 'PN_'
+    config_names = [f'{dlo}/{prfx}{dyn_model}_{n_seg}seg_LFK.yml']
+    configs = get_model_configs(config_names)
+    trained_models = load_trained_model(configs)
 
     # Get data
     train_data = get_data_used_for_training(configs[0])
     train_rollout_length = configs[0]['rollout_length']
     test_rollout_length = x_rollout * train_rollout_length
-    try:
-        n_test_trajs = configs[0]['test_trajs']
-    except KeyError:
-        n_test_trajs = [17]
-    test_trajs = data_pp.load_trajs(n_test_trajs)
+    n_test_trajs = configs[0]['test_trajs']
+    test_trajs = data_utils.load_trajs(n_test_trajs[2:], configs[0]['DLO'])
     test_data = data_pp.construct_test_dataset_from_trajs(
         test_trajs, test_rollout_length, train_data, 'sliding', scale_outputs=False
     )
 
     # Do inference
-    X_rnns, Y_preds = evaluate_models(trained_models, test_data, output_scalar=None)
+    X, Y_preds = evaluate_models(trained_models, test_data)
 
     # Get rfem description
     trained_models[0].decoder._update_rfem_params()
@@ -265,11 +302,12 @@ def visualize_rfem_motion(n_seg: int = 7, dyn_model: str = 'rnn', x_rollout: int
         learned_rfem_params, add_ee_ref_joint=False
     )
 
-    n_window = jnp.array([1])
-    q_rfem, _ = jnp.hsplit(X_rnns[0][n_window].squeeze(), 2)
-    q_b, _ = jnp.hsplit(test_data.U_decoder[n_window].squeeze(), 2)
-    q = jnp.hstack((q_b, q_rfem))
-    visualize_robot(np.asarray(q), 0.004, 4, pin_dlo_model, pin_dlo_geom_model)
+    # n_window = jnp.array([1])
+    for n_window in range(0, len(X[0])):
+        q_rfem, _ = jnp.hsplit(X[0][n_window].squeeze(), 2)
+        q_b, _ = jnp.hsplit(test_data.U_decoder[n_window].squeeze(), 2)
+        q = jnp.hstack((q_b, q_rfem))
+        visualize_robot(np.asarray(q), 0.004, 2, pin_dlo_model, pin_dlo_geom_model)
 
     # n_windows = jnp.array([2, 3])
     # for x_rnn_FK, y_NN, u_dec, y in zip(
@@ -290,8 +328,8 @@ def how_rfem_regularization_affects_dlo_shape(
     reg = '0.5reg'
     config_names = [f'{dlo}/PN_{dyn_model}_{n_seg}seg_LFK_{reg}.yml']
     # config_names = [f'{dlo}/PN_{dyn_model}_{n_seg}seg_LFK.yml']
-    configs = get_models_configs(config_names)
-    trained_models = get_trained_models(configs)
+    configs = get_model_configs(config_names)
+    trained_models = load_trained_model(configs)
 
     # Get data
     train_data = get_data_used_for_training(configs[0])
@@ -337,8 +375,8 @@ def plot_output_prediction(save_fig: False, x_rollout: int = 10):
     # config_names = [f'resnet_{n_seg}seg_FFK.yml',
     #                 f'resnet_{n_seg}seg_NN.yml']
     config_names = [f'PN_rnn_{n_seg}seg_LFK.yml']
-    configs = get_models_configs(config_names)
-    trained_models = get_trained_models(configs)
+    configs = get_model_configs(config_names)
+    trained_models = load_trained_model(configs)
 
     # Get data
     train_data = get_data_used_for_training(configs[0])
@@ -404,8 +442,8 @@ def compute_inference_time():
     dyn_type = 'node'
     dec_type = 'NN'
     config_names = [f'{dyn_type}_{n_seg}seg_{dec_type}.yml']
-    configs = get_models_configs(config_names)
-    trained_models = get_trained_models(configs)
+    configs = get_model_configs(config_names)
+    trained_models = load_trained_model(configs)
 
     # Get data
     train_data = get_data_used_for_training(configs[0])
@@ -432,10 +470,10 @@ def compute_inference_time():
 
 
 if __name__ == "__main__":
-    # main()
+    compare_models('aluminium_rod')
     # how_nseg_affects_predictions(save_fig=True)
     # plot_hidden_rfem_state_evolution()
-    performance_on_different_rollout_lengths()
+    # evaluate_model_performance_and_save_predictions()
     # analyse_encoder()
     # visualize_rfem_motion()
     # plot_output_prediction(save_fig=False)

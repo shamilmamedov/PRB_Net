@@ -132,16 +132,16 @@ def get_decoder(dec_configs, dlo, n_seg, key):
             return decoders.TrainableFKDecoder(dec_params)
 
 
-def get_model(configs):
-    dlo = configs['DLO']
-    n_seg = configs['n_seg']
-    model_key = jax.random.PRNGKey(configs['model_seed'])
+def get_model(config: dict) -> DLOModel:
+    dlo = config['DLO']
+    n_seg = config['n_seg']
+    model_key = jax.random.PRNGKey(config['model_seed'])
     enc_key, dyn_key, dec_key = jrandom.split(model_key, 3)
 
     # Parse, Create and instantiate an encoder
-    encoder = get_encoder(configs['encoder'], n_seg, enc_key)
-    dynamics = get_dynamics(configs['dynamics'], n_seg, dyn_key)
-    decoder = get_decoder(configs['decoder'], dlo, n_seg, dec_key)
+    encoder = get_encoder(config['encoder'], n_seg, enc_key)
+    dynamics = get_dynamics(config['dynamics'], n_seg, dyn_key)
+    decoder = get_decoder(config['decoder'], dlo, n_seg, dec_key)
     return DLOModel(n_seg, encoder, dynamics, decoder)
 
     
