@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 from typing import List
 import pandas as pd
 import time
-import seaborn as sns
 
 
 from training import preprocess_data as data_pp
@@ -16,6 +15,7 @@ import FEIN.utils.nn as nn_utils
 import FEIN.utils.data as data_utils
 from FEIN.rfem_kinematics import models
 from FEIN.rfem_kinematics.visualization import visualize_robot
+
 
 
 def compute_l2_norm_of_pos_prediction_error(
@@ -128,7 +128,7 @@ def get_test_data(config: dict, window: str, x_rollout: int) -> data_utils.DLODa
     return test_data
 
 
-def save_predictions_to_csv(dlo: str, model:str, Y_true, Y_pred, X_pred):
+def save_predictions_to_csv(dlo: str, model:str, Y_true, Y_pred, X_pred, rollout_length: int):
     nx = X_pred.shape[2]
     n_seg = nx // 4
 
@@ -146,96 +146,62 @@ def save_predictions_to_csv(dlo: str, model:str, Y_true, Y_pred, X_pred):
         all_vals, 
         columns=all_cols
     )
-    df.to_csv(f'evaluation/data/{dlo}_{model}_predictions.csv', index=False)
+    df.to_csv(f'evaluation/data/{dlo}_{model}_predictions_{rollout_length}steps.csv', index=False)
 
-
-def load_models_predictions(dlo:str):
-    dir = 'evaluation/data/'
-    names = [
-        f'{dir}{dlo}_resnet_LFK_predictions.csv',
-        f'{dir}{dlo}_resnet_NN_predictions.csv',
-        f'{dir}{dlo}_rnn_LFK_predictions.csv',
-        f'{dir}{dlo}_rnn_NN_predictions.csv',
-        f'{dir}{dlo}_rfem_predictions.csv',
-    ]
-    dfs = [pd.read_csv(name) for name in names]
-    shortcuts = ['FEIN-ResNet', 'ResNet', 'FEIN-RNN', 'RNN', 'RFEM']
-    return dict(zip(shortcuts, dfs))
-
-
-def compare_models(dlo: str):
-    def _compute_l2_norm_of_prediction_error(df):
-        Y_true = df[['pe_x', 'pe_y', 'pe_z']].to_numpy()
-        Y_pred = df[['hat_pe_x', 'hat_pe_y', 'hat_pe_z']].to_numpy()
-
-        E = Y_true - Y_pred
-        return nn_utils.l2_norm(E[None,:,:])
-    
-    # Load models predictions
-    model_pred_dict = load_models_predictions(dlo)
-
-    # Compute prediction errors
-    l2_norms = {}
-    for k, df in model_pred_dict.items():
-        l2_norms[k] = 100*_compute_l2_norm_of_prediction_error(df)    
-
-    # Plot the violinplot using seaborn library, use log scale along y-axis
-    # take into accounbt that l2_norms is a dict of arrays 
-    sns.violinplot(data=list(l2_norms.values()), scale='count', inner='quartile')
-    # Plot the boxplot using seaborn library, use log scale along y-axis
-    # sns.boxplot(data=list(l2_norms.values()))
-    plt.xticks([0, 1, 2, 3, 4], l2_norms.keys())
-    # Put a text with the mean values on each boxplot
-    # for k, v in l2_norms.items():
-    #     plt.text(x=list(l2_norms.keys()).index(k), y=np.mean(v), s=f'{np.mean(v):.2f}')
-    # plt.ylim([0, 30])
-    plt.yscale('log')
-    plt.ylabel(r'$|p_\mathrm{e} - \hat p_\mathrm{e}|_2$ [cm]')
-    plt.grid(alpha=0.25)
-    plt.tight_layout()
-    plt.show()
 
 
 def how_nseg_affects_predictions(save_fig: bool = False):
+    dlo = 'aluminium_rod'
+    dyn = 'rnn'
+    dec = 'LFK'
+    n_segs = [2, 5, 7, 10, 20]
+    
     # Load trained models
-    n_segs = [2, 5, 7, 10]
-    config_names = [f'rnn_{x}seg_FFK.yml' for x in n_segs]
-    configs = get_model_configs(config_names)
-    trained_models = load_trained_model(configs)
+    configs = [get_model_configs(dlo, n_seg, dyn, dec) for n_seg in n_segs]
+    trained_models = [load_trained_model(config) for config in configs]
+
+    # Load test data
+    window = 'sliding'
+    x_rollout = 1
+    test_data = get_test_data(configs[0], window, x_rollout)
+
+    # Evaluate models
+    X, Y = dict(), dict()
+    for n_seg, m in zip(n_segs, trained_models):
+        X_, Y_ = jax.vmap(m)(
+            test_data.U_encoder[:,0,:], 
+            test_data.U_dyn, 
+            test_data.U_decoder
+        )
+        X[n_seg] = X_
+        Y[n_seg] = Y_
+
+    # Compute performance metrics
+    pos_err_norms_in_cm = dict()
+    vel_err_norms_in_cms = dict()
+    for n_seg in n_segs:
+        E = test_data.Y - Y[n_seg]
+        pos_err_norms_in_cm[n_seg] = 100.*nn_utils.mean_l2_norm(E[:,:,:3]).item()
+        vel_err_norms_in_cms[n_seg] = 100.*nn_utils.mean_l2_norm(E[:,:,3:]).item()
+
     
-    # Load train and val data to get sacalars
-    train_data = get_data_used_for_training(configs[0])
-
-    rollout_length = configs[0]['rollout_length']
-    n_test_trajs = [2, 15, 17]
-    test_trajs = data_pp.load_trajs(n_test_trajs)
-    test_data = data_pp.construct_test_dataset_from_trajs(
-        test_trajs, rollout_length, train_data, 'sliding', scale_outputs=True
-    )
-    output_scalar = test_data.output_scalar
-    
-    X_rnns, Y_preds = evaluate_models(trained_models, test_data, output_scalar)
-    pos_error_mean_l2_norm = compute_mean_l2_norm_of_pos_prediction_error(test_data.Y, Y_preds)
-    vel_error_mean_l2_norm = compute_mean_l2_norm_of_vel_prediction_error(test_data.Y, Y_preds)
-
-    print(f"test data size: {test_data.Y.shape[0]}")
-    print(f"rmse: {pos_error_mean_l2_norm}")
-    print(f"mae: {vel_error_mean_l2_norm}")
-
+    # Plot mean l2 norm of prediction error
     fig, ax = plt.subplots(figsize=(4,2))
-    ax.plot(n_segs, 100*jnp.array(pos_error_mean_l2_norm),
-            'o-', label=r'$|p_\mathrm{e} - \hat p_\mathrm{e}|_2$ [cm]')
-    ax.plot(n_segs, 100*jnp.array(vel_error_mean_l2_norm), 
-            'o-', label=r'$|\dot p_\mathrm{e} - \dot{\hat p_\mathrm{e}}|_2$ [cm/s]')
+    ax.plot(pos_err_norms_in_cm.keys(), list(pos_err_norms_in_cm.values()), 'o-', color='blue')
+    # add second y-axis
+    ax2 = ax.twinx()
+    ax2.plot(vel_err_norms_in_cms.keys(), list(vel_err_norms_in_cms.values()), 'o-', color='red')
     ax.grid(alpha=0.25)
-    ax.set_xlabel(r'$n_{\mathrm{seg}}$')
-    ax.set_ylabel(r'$|\mathrm{error}|_2$')
-    ax.legend()
+    ax.set_xlabel(r'$n_{\mathrm{el}}$')
+    ax.set_ylabel(r'$|p_\mathrm{e} - \hat p_\mathrm{e}|_2$ [cm]', fontdict={'color': 'blue'})
+    ax2.set_ylabel(r'$|\dot p_\mathrm{e} - \dot{\hat p_\mathrm{e}}|_2$ [cm/s]', fontdict={'color': 'red'})
+    ax.tick_params(axis='y', labelcolor='blue')
+    ax2.tick_params(axis='y', labelcolor='red')
     plt.tight_layout()
     plt.show()
 
     if save_fig:
-        fig.savefig('CORL_figs/pred_vs_nseg.pdf', format='pdf', dpi=600, bbox_inches='tight')
+        fig.savefig('evaluation/figures/nseg_pred_error.svg', format='svg', dpi=600, bbox_inches='tight')
 
 
 def evaluate_model_performance_and_save_predictions(
@@ -271,7 +237,9 @@ def evaluate_model_performance_and_save_predictions(
     print(f"vel error: {vel_error_mean_l2_norm:.3f}")
 
     # Save predictions to csv
-    save_predictions_to_csv(dlo, model, test_data.Y, Y_pred, X)
+    rollout_length = x_rollout * config['rollout_length']
+    save_predictions_to_csv(dlo, model, test_data.Y, Y_pred, X, rollout_length)
+
 
 def visualize_rfem_motion(dlo:str = 'aluminium_rod', n_seg: int = 7, dyn_model: str = 'rnn', x_rollout: int = 5):
     # config_names = [f'{dyn_type}_{n_seg}seg_FFK.yml',
@@ -468,12 +436,25 @@ def compute_inference_time():
     print(f"Execution time: {execution_time*1000:.3f} ms")
 
 
+def evaluate_model_performance_and_save_predictions_for_all_models(x_rollout: int = 1):
+    dlos = ['aluminium_rod', 'pool_noodle']
+    n_seg = 7
+    dyn = ['rnn', 'resnet']
+    dec = ['LFK', 'NN']
+    for dlo in dlos:
+        for dynamics in dyn:
+            for decoder in dec:
+                evaluate_model_performance_and_save_predictions(
+                    dlo, n_seg, dynamics, decoder, x_rollout
+                )
+
 
 if __name__ == "__main__":
-    compare_models('aluminium_rod')
+    evaluate_model_performance_and_save_predictions_for_all_models(x_rollout=5)
+
     # how_nseg_affects_predictions(save_fig=True)
-    # plot_hidden_rfem_state_evolution()
     # evaluate_model_performance_and_save_predictions()
+    # plot_hidden_rfem_state_evolution()
     # analyse_encoder()
     # visualize_rfem_motion()
     # plot_output_prediction(save_fig=False)
