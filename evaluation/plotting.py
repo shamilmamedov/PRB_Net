@@ -10,9 +10,9 @@ import FEIN.utils.nn as nn_utils
 
 params = {  #'backend': 'ps',
     "text.latex.preamble": r"\usepackage{gensymb} \usepackage{amsmath}",
-    "axes.labelsize": 10,  # fontsize for x and y labels (was 10)
+    "axes.labelsize": 12,  # fontsize for x and y labels (was 10)
     "axes.titlesize": 8,
-    "legend.fontsize": 7,
+    "legend.fontsize": 9,
     "xtick.labelsize": 10,
     "ytick.labelsize": 10,
     "text.usetex": True,
@@ -91,36 +91,44 @@ def compare_models(save: bool = False):
 
 
 def plot_long_term_prediction(save: bool = False):
-    dlo = 'pool_noodle' #'aluminium_rod'
+    dlo1 =  'aluminium_rod'
+    dlo2 = 'pool_noodle'
     rollout_length = 1250
-    ar_pred_dic = load_models_predictions(dlo, rollout_length)
+    ar_pred_dic = load_models_predictions(dlo1, rollout_length)
+    pn_pred_dic = load_models_predictions(dlo2, rollout_length)
+
 
     dlo_iidx = {'aluminium_rod': 13761, 'pool_noodle': 0}
-    i_idx = dlo_iidx[dlo]
-    f_idx = ar_pred_dic['RNN']['pe_x'].shape[0]
-    rollouts = (np.arange(i_idx, f_idx, step=rollout_length+1)[:, None] + 
-                np.arange(rollout_length+1))
-    r = 1
-    idxs = rollouts[r]
+    dlo_r = {'aluminium_rod': 2, 'pool_noodle': 1}
 
+    fig, axs = plt.subplots(3, 2, sharex=True, figsize=(10.5,4))
+    axs = axs.T.reshape(-1)
     ylabels = [r'$\hat p_{e,x}$ [m]', r'$\hat p_{e,y}$ [m]', r'$\hat p_{e,z}$ [m]']
-
-    fig, axs = plt.subplots(3, 1, sharex=True, figsize=(5,4))
-    axs.reshape(-1)
-    time = (idxs-idxs[0])*0.004
-    for y_lbl, ax, pe_axis in zip(ylabels, axs, ['pe_x', 'pe_y', 'pe_z']):
-        ax.plot(time, ar_pred_dic['RNN'][pe_axis][idxs], 'k-', lw=2, label='Measured')
-        for k, df in ar_pred_dic.items():
-            ax.plot(time, df['hat_' + pe_axis][idxs], lw=1, label=k)
-        ax.set_ylabel(y_lbl)
-        ax.grid(alpha=0.25)
-        ax.legend(ncol=5)
-    plt.xlabel('time [s]')
+    for dlo, axs, pred_dic in zip([dlo1, dlo2], [axs[:3], axs[3:]], [ar_pred_dic, pn_pred_dic]):
+        i_idx = dlo_iidx[dlo]
+        f_idx = pred_dic['RNN']['pe_x'].shape[0]
+        rollouts = (np.arange(i_idx, f_idx, step=rollout_length+1)[:, None] + 
+                    np.arange(rollout_length+1))
+        r = dlo_r[dlo]
+        idxs = rollouts[r]
+        
+        time = (idxs-idxs[0])*0.004
+        for y_lbl, ax, pe_axis in zip(ylabels, axs, ['pe_x', 'pe_y', 'pe_z']):
+            ax.plot(time, pred_dic['RNN'][pe_axis][idxs], 'k-', lw=2, label='Measured')
+            for k, df in pred_dic.items():
+                ax.plot(time, df['hat_' + pe_axis][idxs], lw=1, label=k)
+            ax.set_ylabel(y_lbl)
+            ax.set_xlim([0, 5])
+            ax.grid(alpha=0.25)
+            # ax.legend(ncol=5)
+        axs[-1].set_xlabel('time [s]')
+    # specify spacing between legend entries
+    axs[0].legend(ncol=5, handlelength=1.0, columnspacing=0.35, handletextpad=0.5, loc='upper center')
     plt.tight_layout()
     plt.show()
 
     if save:
-        fig.savefig(f'evaluation/figures/long_term_prediction_{dlo}.svg', format='svg', bbox_inches='tight')
+        fig.savefig(f'evaluation/figures/long_term_prediction.svg', format='svg', bbox_inches='tight')
 
 
 if __name__ == '__main__':

@@ -1,6 +1,6 @@
-name: PN_rnn_10seg_LFK
+name: PN_rnn_20seg_LFK
 DLO: pool-noodle
-n_seg: 10
+n_seg: 20
 
 # Dynamics model
 model_seed: 42

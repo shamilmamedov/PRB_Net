@@ -159,8 +159,7 @@ def get_optimizer(configs, steps_per_epoch):
         'adamw': optax.adamw,
         'rmsprop': optax.rmsprop,
         'sgd': optax.sgd,
-        'adabelief': optax.adabelief,
-        'lion': optax.lion
+        'adabelief': optax.adabelief
     }
     transition_epochs = configs['transition_epochs']
     lr_init = configs['initial_learning_rate']
