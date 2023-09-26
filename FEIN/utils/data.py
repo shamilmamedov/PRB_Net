@@ -74,7 +74,9 @@ class DLOTrajectory:
         self.ddphi_b_cols = [f'ddphi_b_{x}' for x in reversed(axes)]
         self.p_e_cols = [f'p_e_{x}' for x in axes]
         self.dp_e_cols = [f'dp_e_{x}' for x in axes]
-
+        self.q_p_cols = [f'q_{i}' for i in range(1, 8)]
+        self.dq_p_cols = [f'dq_{i}' for i in range(1, 8)]
+        
         self.p_b = jnp.array(self.data[self.p_b_cols].values)
         self.phi_b = jnp.array(self.data[self.phi_b_cols].values)
         self.dp_b = jnp.array(self.data[self.dp_b_cols].values)
@@ -83,6 +85,8 @@ class DLOTrajectory:
         self.ddphi_b = jnp.array(self.data[self.ddphi_b_cols].values)
         self.p_e = jnp.array(self.data[self.p_e_cols].values)
         self.dp_e = jnp.array(self.data[self.dp_e_cols].values)
+        self.q_p = jnp.array(self.data[self.q_p_cols].values)
+        self.dq_p = jnp.array(self.data[self.dq_p_cols].values)
 
     def get_sliced_copy(self, idxs):
         sliced_obj = copy.copy(self)

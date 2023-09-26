@@ -4,6 +4,8 @@ FEIN/__pycache__
 FEIN/utils/__pycache__
 FEIN/rfem_kinematics/__pycache__
 
+panda_description/
+
 # Weights and biases
 wandb
 wandb-debug.log

@@ -56,6 +56,108 @@ class RFEMParameters:
         )
 
 
+def create_setup_pinocchio_model(rfem_params: RFEMParameters, add_ee_ref_joint: bool = False):
+    base_joint_constructor = {
+        jutils.JointType.U_ZY: create_universal_joint(),
+        jutils.JointType.P_XYZ: pin.JointModelTranslation(),
+        jutils.JointType.FREE: create_free_joint()
+    }
+
+    # Load panda model
+    urdf_path = 'panda_description/panda_arm.urdf'
+    model, cmodel, vmodel = pin.buildModelsFromUrdf(urdf_path)
+    parent_frame_id = model.getFrameId('table_link')
+    parent_joint_id = 0
+
+    # Add rfem to the model
+    rod_radius_viz = 0.035
+    n_seg = rfem_params.n_seg
+    rfe_lengths = np.asarray(rfem_params.lengths)
+    rfe_m = [float(x) for x in rfem_params.m]
+    rfe_rc = [np.asarray(x) for x in rfem_params.rc]
+    rfe_I = [np.asarray(x) for x in rfem_params.I]
+    p_markers = rfem_params.marker_positions
+    base_joint = base_joint_constructor[rfem_params.base_joint_type]
+
+    # Joint and body placement
+    joint_placement = model.frames[parent_frame_id].placement # pin.SE3.Identity()
+    body_placement = pin.SE3.Identity()
+    body_placement.rotation = pin.rpy.rpyToMatrix(0., np.pi/2, 0.)
+    
+    # Implement universal joint by combining two revolute joints
+    universal_joint = create_universal_joint()
+    jtypes = [base_joint] + [universal_joint]*n_seg
+    jids = []
+    for k, (jtype, lxk, mk, rck, Ik) in enumerate(zip(jtypes, rfe_lengths, rfe_m, rfe_rc, rfe_I)):
+        # Add joint to the model
+        joint_name = 'rfem_joint_' + str(k+1)
+        joint_id = model.addJoint(
+            parent_joint_id,
+            jtype,
+            joint_placement,
+            joint_name
+        )
+        jids.append(joint_id)
+        
+        body_inertia = pin.Inertia(mk, rck, Ik)
+        body_placement.translation[0] = lxk
+        model.appendBodyToJoint(joint_id, body_inertia, pin.SE3.Identity())
+
+        # Define geometry for visualizzation
+        geom_name = "rfe_" + str(k+1)
+        shape = fcl.Cylinder(rod_radius_viz, body_placement.translation[0])
+        shape_placement = body_placement.copy()
+        shape_placement.translation[0] /= 2.
+        geom_obj = pin.GeometryObject(
+            geom_name, joint_id, shape, shape_placement
+        )
+        geom_obj.meshColor = np.array([0.85, 0.85, 0.85, 1.]) 
+        vmodel.addGeometryObject(geom_obj)
+        cmodel.addGeometryObject(geom_obj)
+
+        # Adding the next joint
+        # NOTE transformation from parent to joint assumed I
+        parent_joint_id = joint_id
+        joint_placement = pin.SE3.Identity()
+        joint_placement.translation[0] = lxk
+
+    fparents = rfem.compute_marker_frames_parent_joints(rfe_lengths, p_markers)
+    fplacements = rfem.compute_marker_frames_placements(rfe_lengths, fparents, p_markers)
+    for k, (pj_idx, f_pos) in enumerate(zip(fparents, fplacements)):
+        # Attach frame in the middle of the link
+        frame_name = 'marker_' + str(k+1)
+        frame_placement = pin.SE3.Identity()
+        frame_placement.translation = np.array(f_pos)
+        frame = pin.Frame(
+            frame_name, jids[pj_idx], jids[pj_idx], frame_placement, pin.FrameType.OP_FRAME
+        )
+        model.addFrame(frame)
+
+    if add_ee_ref_joint:
+        joint_parent_id = 0
+        joint_placement = model.frames[parent_frame_id].placement
+        joint_name = 'ee_ref_joint'
+        joint_id = model.addJoint(
+            joint_parent_id,
+            pin.JointModelTranslation(),
+            joint_placement,
+            joint_name
+        )
+
+        body_inertia = pin.Inertia.Zero()
+        model.appendBodyToJoint(joint_id, body_inertia, pin.SE3.Identity())
+
+        geom_name = "ee_ref"
+        shape = fcl.Sphere(0.015)
+        shape_placement = pin.SE3.Identity()
+        geom_obj = pin.GeometryObject(geom_name, joint_id, shape, shape_placement)
+        geom_obj.meshColor = np.array([0.839, 0.075, 0.075, 1.])
+        vmodel.addGeometryObject(geom_obj)
+        cmodel.addGeometryObject(geom_obj)
+
+    return model, cmodel, vmodel
+
+
 def create_rfem_pinocchio_model(rfem_params: RFEMParameters, add_ee_ref_joint: bool = False):
     base_joint_constructor = {
         jutils.JointType.U_ZY: create_universal_joint(),

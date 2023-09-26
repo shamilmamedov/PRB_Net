@@ -21,9 +21,17 @@ def visualize_robot(q, dt, n_replays, model, geom_model, vis_model=None, visuali
         viz = Panda3dVisualizer(model, geom_model, vis_model)
         viewer = Viewer(config=PANDA3D_CONFIG)
         viewer.set_background_color(((255, 255, 255)))
-        viewer.reset_camera((4, 3, 3), look_at=(1,0,0))
+        viewer.reset_camera((4, 3, 3), look_at=(1,0,1))
         viz.initViewer(viewer=viewer)
         viz.loadViewerModel(group_name=f'{model.name}')
+
+        # set rfe colors
+        for k, geom in enumerate(viz.visual_model.geometryObjects):
+            if 'rfe' in geom.name or 'ee_ref' in geom.name:
+                rgba = vis_model.geometryObjects[k].meshColor
+                rgba = (rgba[0], rgba[1], rgba[2], rgba[3])
+                viz.viewer.set_material(viz.visual_group, geom.name, rgba)
+
     if visualizer == 'meshcat':
         viz = MeshcatVisualizer(model, geom_model, vis_model)
         viz.initViewer()
@@ -31,12 +39,10 @@ def visualize_robot(q, dt, n_replays, model, geom_model, vis_model=None, visuali
     
     
     for _ in range(n_replays):
-        viz.display(q[0, :])
-        time.sleep(2)
         if visualizer == 'panda3d':
-            viz.play(q[1:, :], dt)
+            viz.play(q, dt)
         if visualizer == 'meshcat':
-            viz.play(q[1:, :], dt)
-        time.sleep(1)
+            viz.play(q, dt)
+        time.sleep(2)
     viz.viewer.stop()
 

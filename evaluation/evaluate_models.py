@@ -7,7 +7,8 @@ import matplotlib.pyplot as plt
 from typing import List
 import pandas as pd
 import time
-
+import matplotlib
+import pickle
 
 from training import preprocess_data as data_pp
 from training.run_experiment import get_model
@@ -16,6 +17,18 @@ import FEIN.utils.data as data_utils
 from FEIN.rfem_kinematics import models
 from FEIN.rfem_kinematics.visualization import visualize_robot
 
+
+params = {  #'backend': 'ps',
+    "text.latex.preamble": r"\usepackage{gensymb} \usepackage{amsmath}",
+    "axes.labelsize": 12,  # fontsize for x and y labels (was 10)
+    "axes.titlesize": 8,
+    "legend.fontsize": 9,
+    "xtick.labelsize": 10,
+    "ytick.labelsize": 10,
+    "text.usetex": True,
+    "font.family": "serif",
+}
+matplotlib.rcParams.update(params)
 
 
 def compute_l2_norm_of_pos_prediction_error(
@@ -128,7 +141,25 @@ def get_test_data(config: dict, window: str, x_rollout: int) -> data_utils.DLODa
     return test_data
 
 
-def save_predictions_to_csv(dlo: str, model:str, Y_true, Y_pred, X_pred, rollout_length: int):
+def get_panda_rollouts(config: dict, window: str, x_rollout: int):
+    window_divider = {
+        'rolling':data_pp.divide_into_rolling_windows_and_stack,
+        'sliding': data_pp.divide_into_sliding_windows_and_stack
+    }
+
+    train_rollout_length = config['rollout_length']
+    test_rollout_length = x_rollout * train_rollout_length
+    
+    n_test_trajs = config['test_trajs']
+    test_trajs = data_utils.load_trajs(n_test_trajs, config['DLO'])
+    
+    q_panda = [t.q_p for t in test_trajs]
+    out = window_divider[window](q_panda, test_rollout_length)
+    return out
+
+
+def save_predictions_to_csv(dlo: str, model:str, Y_true, Y_pred, X_pred):
+    rollout_length = Y_true.shape[1]
     nx = X_pred.shape[2]
     n_seg = nx // 4
 
@@ -149,54 +180,78 @@ def save_predictions_to_csv(dlo: str, model:str, Y_true, Y_pred, X_pred, rollout
     df.to_csv(f'evaluation/data/{dlo}_{model}_predictions_{rollout_length}steps.csv', index=False)
 
 
-
 def how_nseg_affects_predictions(save_fig: bool = False):
-    dlo = 'aluminium_rod'
+    dlo1 = 'aluminium_rod'
+    dlo2 = 'pool_noodle'
     dyn = 'rnn'
     dec = 'LFK'
     n_segs = [2, 5, 7, 10, 20]
     
     # Load trained models
-    configs = [get_model_configs(dlo, n_seg, dyn, dec) for n_seg in n_segs]
-    trained_models = [load_trained_model(config) for config in configs]
+    ar_configs = [get_model_configs(dlo1, n_seg, dyn, dec) for n_seg in n_segs]
+    ar_trained_models = [load_trained_model(config) for config in ar_configs]
+
+    pn_configs = [get_model_configs(dlo2, n_seg, dyn, dec) for n_seg in n_segs]
+    pn_trained_models = [load_trained_model(config) for config in pn_configs]
 
     # Load test data
     window = 'sliding'
     x_rollout = 1
-    test_data = get_test_data(configs[0], window, x_rollout)
+    ar_test_data = get_test_data(ar_configs[0], window, x_rollout)
+    pn_test_data = get_test_data(pn_configs[0], window, x_rollout)
 
     # Evaluate models
-    X, Y = dict(), dict()
-    for n_seg, m in zip(n_segs, trained_models):
+    X_ar, Y_ar = dict(), dict()
+    for n_seg, m in zip(n_segs, ar_trained_models):
         X_, Y_ = jax.vmap(m)(
-            test_data.U_encoder[:,0,:], 
-            test_data.U_dyn, 
-            test_data.U_decoder
+            ar_test_data.U_encoder[:,0,:], 
+            ar_test_data.U_dyn, 
+            ar_test_data.U_decoder
         )
-        X[n_seg] = X_
-        Y[n_seg] = Y_
+        X_ar[n_seg] = X_
+        Y_ar[n_seg] = Y_
+
+    X_pn, Y_pn = dict(), dict()
+    for n_seg, m in zip(n_segs, pn_trained_models):
+        X_, Y_ = jax.vmap(m)(
+            pn_test_data.U_encoder[:,0,:], 
+            pn_test_data.U_dyn, 
+            pn_test_data.U_decoder
+        )
+        X_pn[n_seg] = X_
+        Y_pn[n_seg] = Y_
 
     # Compute performance metrics
-    pos_err_norms_in_cm = dict()
-    vel_err_norms_in_cms = dict()
+    ar_pos_err_norms_in_cm = dict()
+    ar_vel_err_norms_in_cms = dict()
+    pn_pos_err_norms_in_cm = dict()
+    pn_vel_err_norms_in_cms = dict()
     for n_seg in n_segs:
-        E = test_data.Y - Y[n_seg]
-        pos_err_norms_in_cm[n_seg] = 100.*nn_utils.mean_l2_norm(E[:,:,:3]).item()
-        vel_err_norms_in_cms[n_seg] = 100.*nn_utils.mean_l2_norm(E[:,:,3:]).item()
+        E = ar_test_data.Y - Y_ar[n_seg]
+        ar_pos_err_norms_in_cm[n_seg] = 100.*nn_utils.mean_l2_norm(E[:,:,:3]).item()
+        ar_vel_err_norms_in_cms[n_seg] = 100.*nn_utils.mean_l2_norm(E[:,:,3:]).item()
 
-    
+        E = pn_test_data.Y - Y_pn[n_seg]
+        pn_pos_err_norms_in_cm[n_seg] = 100.*nn_utils.mean_l2_norm(E[:,:,:3]).item()
+        pn_vel_err_norms_in_cms[n_seg] = 100.*nn_utils.mean_l2_norm(E[:,:,3:]).item()
+
+    pos_err = [ar_pos_err_norms_in_cm, pn_pos_err_norms_in_cm]
+    vel_err = [ar_vel_err_norms_in_cms, pn_vel_err_norms_in_cms]
+
     # Plot mean l2 norm of prediction error
-    fig, ax = plt.subplots(figsize=(4,2))
-    ax.plot(pos_err_norms_in_cm.keys(), list(pos_err_norms_in_cm.values()), 'o-', color='blue')
-    # add second y-axis
-    ax2 = ax.twinx()
-    ax2.plot(vel_err_norms_in_cms.keys(), list(vel_err_norms_in_cms.values()), 'o-', color='red')
-    ax.grid(alpha=0.25)
-    ax.set_xlabel(r'$n_{\mathrm{el}}$')
-    ax.set_ylabel(r'$|p_\mathrm{e} - \hat p_\mathrm{e}|_2$ [cm]', fontdict={'color': 'blue'})
-    ax2.set_ylabel(r'$|\dot p_\mathrm{e} - \dot{\hat p_\mathrm{e}}|_2$ [cm/s]', fontdict={'color': 'red'})
-    ax.tick_params(axis='y', labelcolor='blue')
-    ax2.tick_params(axis='y', labelcolor='red')
+    fig, axs = plt.subplots(1,2,figsize=(5,2))
+    axs.reshape(-1)
+    for ax, pos_err, vel_err in zip(axs, pos_err, vel_err):
+        ax.plot(pos_err.keys(), list(pos_err.values()), 'o-', color='#82bfe8')
+        # add second y-axis
+        ax2 = ax.twinx()
+        ax2.plot(vel_err.keys(), list(vel_err.values()), 'o-', color='#ff8080')
+        ax.grid(alpha=0.25)
+        ax.set_xlabel(r'$n_{\mathrm{el}}$')
+        ax.tick_params(axis='y', labelcolor='#82bfe8')
+        ax2.tick_params(axis='y', labelcolor='#ff8080')
+    ax2.set_ylabel(r'$||p_\mathrm{e} - \hat p_\mathrm{e}||_2$ [cm/s]', fontdict={'color': '#ff8080'})
+    axs[0].set_ylabel(r'$||p_\mathrm{e} - \hat p_\mathrm{e}||_2$ [cm]', fontdict={'color': '#82bfe8'})
     plt.tight_layout()
     plt.show()
 
@@ -208,7 +263,7 @@ def evaluate_model_performance_and_save_predictions(
         dlo: str = 'pool_noodle',# 'pool_noodle', 'aluminium_rod'
         n_seg: int = 7,
         dynamics: str = 'rnn',
-        decoder: str = 'NN',
+        decoder: str = 'LFK',
         x_rollout: int = 1
 ):
     # Load trained model
@@ -218,6 +273,7 @@ def evaluate_model_performance_and_save_predictions(
     # Load train and val data to get sacalars
     window = 'sliding'
     test_data = get_test_data(config, window, x_rollout)
+    
     
     # Evaluate model
     X, Y_pred = jax.vmap(trained_model)(
@@ -237,55 +293,48 @@ def evaluate_model_performance_and_save_predictions(
     print(f"vel error: {vel_error_mean_l2_norm:.3f}")
 
     # Save predictions to csv
-    rollout_length = x_rollout * config['rollout_length']
-    save_predictions_to_csv(dlo, model, test_data.Y, Y_pred, X, rollout_length)
+    save_predictions_to_csv(dlo, model, test_data.Y, Y_pred, X)
 
 
-def visualize_rfem_motion(dlo:str = 'aluminium_rod', n_seg: int = 7, dyn_model: str = 'rnn', x_rollout: int = 5):
-    # config_names = [f'{dyn_type}_{n_seg}seg_FFK.yml',
-    #                 f'{dyn_type}_{n_seg}seg_NN.yml']
-    prfx = ''
-    if dlo == 'pool_noodle': prfx = 'PN_'
-    config_names = [f'{dlo}/{prfx}{dyn_model}_{n_seg}seg_LFK.yml']
-    configs = get_model_configs(config_names)
-    trained_models = load_trained_model(configs)
+def visualize_dlo_motion(
+        dlo:str = 'pool_noodle', 
+        n_seg: int = 7, 
+        dynamics: str = 'rnn', 
+        x_rollout: int = 5
+):
+    # Load trained model
+    decoder = 'LFK'
+    config = get_model_configs(dlo, n_seg, dynamics, decoder)
+    trained_model = load_trained_model(config)
 
-    # Get data
-    train_data = get_data_used_for_training(configs[0])
-    train_rollout_length = configs[0]['rollout_length']
-    test_rollout_length = x_rollout * train_rollout_length
-    n_test_trajs = configs[0]['test_trajs']
-    test_trajs = data_utils.load_trajs(n_test_trajs[2:], configs[0]['DLO'])
-    test_data = data_pp.construct_test_dataset_from_trajs(
-        test_trajs, test_rollout_length, train_data, 'sliding', scale_outputs=False
+    # Load train and val data to get sacalars
+    window = 'sliding'
+    test_data = get_test_data(config, window, x_rollout)
+    panda_rlts = get_panda_rollouts(config, window, x_rollout)
+
+    # Evaluate model
+    X, Y_pred = jax.vmap(trained_model)(
+        test_data.U_encoder[:,0,:], 
+        test_data.U_dyn, 
+        test_data.U_decoder
     )
-
-    # Do inference
-    X, Y_preds = evaluate_models(trained_models, test_data)
 
     # Get rfem description
-    trained_models[0].decoder._update_rfem_params()
-    learned_rfem_params = trained_models[0].decoder.rfem_params
-    pin_dlo_model, pin_dlo_geom_model = models.create_rfem_pinocchio_model(
-        learned_rfem_params, add_ee_ref_joint=False
-    )
+    trained_model.decoder._update_rfem_params()
+    learned_rfem_params = trained_model.decoder.rfem_params
+    model, cmodel, vmodel = models.create_setup_pinocchio_model(learned_rfem_params, add_ee_ref_joint=True)
 
+    dt = 0.04
+    n_replays = 2
     # n_window = jnp.array([1])
-    for n_window in range(0, len(X[0])):
-        q_rfem, _ = jnp.hsplit(X[0][n_window].squeeze(), 2)
+    for n_window in range(0, len(X)):
+        q_rfem, _ = jnp.hsplit(X[n_window].squeeze(), 2)
+        q_p = panda_rlts[n_window]
         q_b, _ = jnp.hsplit(test_data.U_decoder[n_window].squeeze(), 2)
-        q = jnp.hstack((q_b, q_rfem))
-        visualize_robot(np.asarray(q), 0.004, 2, pin_dlo_model, pin_dlo_geom_model)
+        p_e = test_data.Y[n_window, :, :3]
+        q = jnp.hstack((q_p, q_b, q_rfem, p_e))
+        visualize_robot(np.array(q[::10,:]), dt, n_replays, model, cmodel, vmodel)
 
-    # n_windows = jnp.array([2, 3])
-    # for x_rnn_FK, y_NN, u_dec, y in zip(
-    #     X_rnns[0][n_windows], Y_preds[1][n_windows], test_data.U_decoder[n_windows], test_data.Y[n_windows]):
-    #     q_rfem, _ = jnp.hsplit(x_rnn_FK, 2)
-    #     q_b, _ = jnp.hsplit(u_dec, 2)
-    #     pe_meas, _ = jnp.hsplit(y, 2)
-    #     pe_pred_NN, _ = jnp.hsplit(y_NN, 2)
-    #     q = jnp.hstack((q_b, q_rfem, pe_meas, pe_pred_NN))
-    #     visualize_robot(np.asarray(q), 0.004, 4, pin_dlo_model, pin_dlo_geom_model)
 
 
 def how_rfem_regularization_affects_dlo_shape(
@@ -450,10 +499,12 @@ def evaluate_model_performance_and_save_predictions_for_all_models(x_rollout: in
 
 
 if __name__ == "__main__":
-    evaluate_model_performance_and_save_predictions_for_all_models(x_rollout=5)
-
-    # how_nseg_affects_predictions(save_fig=True)
+    # evaluate_model_performance_and_save_predictions_for_all_models(x_rollout=1)
     # evaluate_model_performance_and_save_predictions()
+    # how_nseg_affects_predictions(save_fig=True)
+    visualize_dlo_motion(dlo='pool_noodle')
+
+
     # plot_hidden_rfem_state_evolution()
     # analyse_encoder()
     # visualize_rfem_motion()
