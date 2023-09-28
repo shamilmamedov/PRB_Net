@@ -8,7 +8,7 @@ import FEIN.utils.kinematics as jutils
 
 
 def main():
-    n_seg = 5
+    n_seg = 7
     P_markers = [1.92]
 
     dlo_params = load_aluminium_rod_params()

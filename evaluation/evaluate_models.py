@@ -322,10 +322,12 @@ def visualize_dlo_motion(
     # Get rfem description
     trained_model.decoder._update_rfem_params()
     learned_rfem_params = trained_model.decoder.rfem_params
-    model, cmodel, vmodel = models.create_setup_pinocchio_model(learned_rfem_params, add_ee_ref_joint=True)
+    model, cmodel, vmodel = models.create_setup_pinocchio_model(
+        learned_rfem_params, add_ee_ref_joint=True
+    )
 
     dt = 0.04
-    n_replays = 2
+    n_replays = 1
     # n_window = jnp.array([1])
     for n_window in range(0, len(X)):
         q_rfem, _ = jnp.hsplit(X[n_window].squeeze(), 2)
@@ -333,7 +335,8 @@ def visualize_dlo_motion(
         q_b, _ = jnp.hsplit(test_data.U_decoder[n_window].squeeze(), 2)
         p_e = test_data.Y[n_window, :, :3]
         q = jnp.hstack((q_p, q_b, q_rfem, p_e))
-        visualize_robot(np.array(q[::10,:]), dt, n_replays, model, cmodel, vmodel)
+        visualize_robot(np.array(q[::10,:]), dt, n_replays, model, cmodel, vmodel, 
+                        video_name=f'{dlo}_{n_window+1}_rollout')
 
 
 
@@ -499,10 +502,10 @@ def evaluate_model_performance_and_save_predictions_for_all_models(x_rollout: in
 
 
 if __name__ == "__main__":
-    # evaluate_model_performance_and_save_predictions_for_all_models(x_rollout=1)
+    # evaluate_model_performance_and_save_predictions_for_all_models(x_rollout=20)
     # evaluate_model_performance_and_save_predictions()
     # how_nseg_affects_predictions(save_fig=True)
-    visualize_dlo_motion(dlo='pool_noodle')
+    visualize_dlo_motion(dlo='aluminium_rod', x_rollout=5)
 
 
     # plot_hidden_rfem_state_evolution()

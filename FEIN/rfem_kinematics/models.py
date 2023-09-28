@@ -111,7 +111,7 @@ def create_setup_pinocchio_model(rfem_params: RFEMParameters, add_ee_ref_joint: 
         geom_obj = pin.GeometryObject(
             geom_name, joint_id, shape, shape_placement
         )
-        geom_obj.meshColor = np.array([0.85, 0.85, 0.85, 1.]) 
+        geom_obj.meshColor = np.array([0.729, 0.729, 0.729, 1.]) 
         vmodel.addGeometryObject(geom_obj)
         cmodel.addGeometryObject(geom_obj)
 
