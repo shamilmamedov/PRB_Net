@@ -41,7 +41,7 @@ def visualize_robot(
 
         # set rfe colors
         for k, geom in enumerate(viz.visual_model.geometryObjects):
-            if 'rfe' in geom.name or 'ee_ref' in geom.name:
+            if 'rfe' in geom.name or 'ee_ref' in geom.name or 'marker_' in geom.name:
                 rgba = vis_model.geometryObjects[k].meshColor
                 rgba = (rgba[0], rgba[1], rgba[2], rgba[3])
                 viz.viewer.set_material(viz.visual_group, geom.name, rgba)

@@ -56,7 +56,11 @@ class RFEMParameters:
         )
 
 
-def create_setup_pinocchio_model(rfem_params: RFEMParameters, add_ee_ref_joint: bool = False):
+def create_setup_pinocchio_model(
+    rfem_params: RFEMParameters, 
+    add_ee_ref_joint: bool = False,
+    rod_radius_viz: float = 0.035
+):
     base_joint_constructor = {
         jutils.JointType.U_ZY: create_universal_joint(),
         jutils.JointType.P_XYZ: pin.JointModelTranslation(),
@@ -70,7 +74,6 @@ def create_setup_pinocchio_model(rfem_params: RFEMParameters, add_ee_ref_joint: 
     parent_joint_id = 0
 
     # Add rfem to the model
-    rod_radius_viz = 0.035
     n_seg = rfem_params.n_seg
     rfe_lengths = np.asarray(rfem_params.lengths)
     rfe_m = [float(x) for x in rfem_params.m]
@@ -132,6 +135,13 @@ def create_setup_pinocchio_model(rfem_params: RFEMParameters, add_ee_ref_joint: 
             frame_name, jids[pj_idx], jids[pj_idx], frame_placement, pin.FrameType.OP_FRAME
         )
         model.addFrame(frame)
+
+        shape = fcl.Sphere(0.01)
+        geom_obj = pin.GeometryObject(frame_name, jids[pj_idx], shape, frame_placement)
+        geom_obj.meshColor = np.array([0.31, 0.42, 0.949, 1.])
+        vmodel.addGeometryObject(geom_obj)
+        cmodel.addGeometryObject(geom_obj)
+
 
     if add_ee_ref_joint:
         joint_parent_id = 0

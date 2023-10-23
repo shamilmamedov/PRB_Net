@@ -302,6 +302,7 @@ def visualize_dlo_motion(
         dynamics: str = 'rnn', 
         x_rollout: int = 5
 ):
+    dlo_rod_radius = {'aluminium_rod': 0.01, 'pool_noodle': 0.025}
     # Load trained model
     decoder = 'LFK'
     config = get_model_configs(dlo, n_seg, dynamics, decoder)
@@ -323,13 +324,14 @@ def visualize_dlo_motion(
     trained_model.decoder._update_rfem_params()
     learned_rfem_params = trained_model.decoder.rfem_params
     model, cmodel, vmodel = models.create_setup_pinocchio_model(
-        learned_rfem_params, add_ee_ref_joint=True
+        learned_rfem_params, add_ee_ref_joint=True, rod_radius_viz=dlo_rod_radius[dlo]
     )
 
     dt = 0.04
     n_replays = 1
     # n_window = jnp.array([1])
-    for n_window in range(0, len(X)):
+    idx_start = 0 # if dlo == 'pool_noodle' else 60 // x_rollout
+    for n_window in range(idx_start, len(X)):
         q_rfem, _ = jnp.hsplit(X[n_window].squeeze(), 2)
         q_p = panda_rlts[n_window]
         q_b, _ = jnp.hsplit(test_data.U_decoder[n_window].squeeze(), 2)
