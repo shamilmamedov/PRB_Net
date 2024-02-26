@@ -219,7 +219,7 @@ def get_data(config, key):
     return train_data, val_data
 
 
-def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model: bool = True):
+def main(config: Union[str, List] = None, wandb_mode: str = 'disabled', save_model: bool = True):
     @eqx.filter_jit
     def compute_loss(model, U_enc, U_dyn, U_dec, Y):
         X_dyn, Y_pred_dyn = jax.vmap(model, in_axes=(0,0,0))(U_enc[:,0,:], U_dyn, U_dec)
@@ -429,6 +429,6 @@ def main(config: Union[str, List] = None, wandb_mode: str = 'online', save_model
 
 
 if __name__ == '__main__': 
-    fire.Fire(main)
-    # config  = 'tests/experiment_configs/rnn_test_6.yml'
-    # main(config=config, wandb_mode='disabled', save_model=False)
+    # fire.Fire(main)
+    config  = 'training/experiment_configs/pool_noodle/PN_rnn_4seg_LFK_rss.yml'
+    main(config=config, wandb_mode='disabled', save_model=True)

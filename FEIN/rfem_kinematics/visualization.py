@@ -84,7 +84,7 @@ def visualize_robot(
 
         output_video = f'{video_name}.mp4'
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec for MP4 format
-        video = cv2.VideoWriter(output_video, fourcc, 25, (width, height))
+        video = cv2.VideoWriter(output_video, fourcc, int(1/dt), (width, height))
 
         for image in images:
             img_path = os.path.join(capture_dir, image)

@@ -30,7 +30,7 @@ params = {  #'backend': 'ps',
 }
 matplotlib.rcParams.update(params)
 
-
+      
 def compute_l2_norm_of_pos_prediction_error(
         Y_true: jnp.ndarray, 
         Y_preds: List[jnp.ndarray]
@@ -177,86 +177,7 @@ def save_predictions_to_csv(dlo: str, model:str, Y_true, Y_pred, X_pred):
         all_vals, 
         columns=all_cols
     )
-    df.to_csv(f'evaluation/data/{dlo}_{model}_predictions_{rollout_length}steps.csv', index=False)
-
-
-def how_nseg_affects_predictions(save_fig: bool = False):
-    dlo1 = 'aluminium_rod'
-    dlo2 = 'pool_noodle'
-    dyn = 'rnn'
-    dec = 'LFK'
-    n_segs = [2, 5, 7, 10, 20]
-    
-    # Load trained models
-    ar_configs = [get_model_configs(dlo1, n_seg, dyn, dec) for n_seg in n_segs]
-    ar_trained_models = [load_trained_model(config) for config in ar_configs]
-
-    pn_configs = [get_model_configs(dlo2, n_seg, dyn, dec) for n_seg in n_segs]
-    pn_trained_models = [load_trained_model(config) for config in pn_configs]
-
-    # Load test data
-    window = 'sliding'
-    x_rollout = 1
-    ar_test_data = get_test_data(ar_configs[0], window, x_rollout)
-    pn_test_data = get_test_data(pn_configs[0], window, x_rollout)
-
-    # Evaluate models
-    X_ar, Y_ar = dict(), dict()
-    for n_seg, m in zip(n_segs, ar_trained_models):
-        X_, Y_ = jax.vmap(m)(
-            ar_test_data.U_encoder[:,0,:], 
-            ar_test_data.U_dyn, 
-            ar_test_data.U_decoder
-        )
-        X_ar[n_seg] = X_
-        Y_ar[n_seg] = Y_
-
-    X_pn, Y_pn = dict(), dict()
-    for n_seg, m in zip(n_segs, pn_trained_models):
-        X_, Y_ = jax.vmap(m)(
-            pn_test_data.U_encoder[:,0,:], 
-            pn_test_data.U_dyn, 
-            pn_test_data.U_decoder
-        )
-        X_pn[n_seg] = X_
-        Y_pn[n_seg] = Y_
-
-    # Compute performance metrics
-    ar_pos_err_norms_in_cm = dict()
-    ar_vel_err_norms_in_cms = dict()
-    pn_pos_err_norms_in_cm = dict()
-    pn_vel_err_norms_in_cms = dict()
-    for n_seg in n_segs:
-        E = ar_test_data.Y - Y_ar[n_seg]
-        ar_pos_err_norms_in_cm[n_seg] = 100.*nn_utils.mean_l2_norm(E[:,:,:3]).item()
-        ar_vel_err_norms_in_cms[n_seg] = 100.*nn_utils.mean_l2_norm(E[:,:,3:]).item()
-
-        E = pn_test_data.Y - Y_pn[n_seg]
-        pn_pos_err_norms_in_cm[n_seg] = 100.*nn_utils.mean_l2_norm(E[:,:,:3]).item()
-        pn_vel_err_norms_in_cms[n_seg] = 100.*nn_utils.mean_l2_norm(E[:,:,3:]).item()
-
-    pos_err = [ar_pos_err_norms_in_cm, pn_pos_err_norms_in_cm]
-    vel_err = [ar_vel_err_norms_in_cms, pn_vel_err_norms_in_cms]
-
-    # Plot mean l2 norm of prediction error
-    fig, axs = plt.subplots(1,2,figsize=(5,2))
-    axs.reshape(-1)
-    for ax, pos_err, vel_err in zip(axs, pos_err, vel_err):
-        ax.plot(pos_err.keys(), list(pos_err.values()), 'o-', color='#82bfe8')
-        # add second y-axis
-        ax2 = ax.twinx()
-        ax2.plot(vel_err.keys(), list(vel_err.values()), 'o-', color='#ff8080')
-        ax.grid(alpha=0.25)
-        ax.set_xlabel(r'$n_{\mathrm{el}}$')
-        ax.tick_params(axis='y', labelcolor='#82bfe8')
-        ax2.tick_params(axis='y', labelcolor='#ff8080')
-    ax2.set_ylabel(r'$||p_\mathrm{e} - \hat p_\mathrm{e}||_2$ [cm/s]', fontdict={'color': '#ff8080'})
-    axs[0].set_ylabel(r'$||p_\mathrm{e} - \hat p_\mathrm{e}||_2$ [cm]', fontdict={'color': '#82bfe8'})
-    plt.tight_layout()
-    plt.show()
-
-    if save_fig:
-        fig.savefig('evaluation/figures/nseg_pred_error.svg', format='svg', dpi=600, bbox_inches='tight')
+    df.to_csv(f'evaluation/data/{dlo}_{model}_{n_seg}seg_predictions_{rollout_length}steps.csv', index=False)
 
 
 def evaluate_model_performance_and_save_predictions(
@@ -284,14 +205,21 @@ def evaluate_model_performance_and_save_predictions(
     
     # Compute performance metrics
     E = test_data.Y - Y_pred
+    pos_err_l2_norm = nn_utils.l2_norm(E[:,:,:3])
+    vel_err_l2_norm = nn_utils.l2_norm(E[:,:,3:])
+    pos_err_l2_norm_mean = 100*jnp.mean(pos_err_l2_norm).item()
+    vel_err_l2_norm_mean = 100*jnp.mean(vel_err_l2_norm).item()
+    pos_err_l2_norm_std = 100*jnp.std(pos_err_l2_norm).item()
+    vel_err_l2_norm_std = 100*jnp.std(vel_err_l2_norm).item()
+
     pos_error_mean_l2_norm = nn_utils.mean_l2_norm(E[:,:,:3]).item()
     vel_error_mean_l2_norm = nn_utils.mean_l2_norm(E[:,:,3:]).item()
+    
 
     model = f'{dynamics}_{decoder}'
     print(f"model: {model}")
-    print(f"pos error: {pos_error_mean_l2_norm:.3f}")
-    print(f"vel error: {vel_error_mean_l2_norm:.3f}")
-
+    print(f"pos err: {pos_err_l2_norm_mean:.1f} +/- {pos_err_l2_norm_std:.1f} cm")
+    print(f"vel err: {vel_err_l2_norm_mean:.1f} +/- {vel_err_l2_norm_std:.1f} cm/s")
     # Save predictions to csv
     save_predictions_to_csv(dlo, model, test_data.Y, Y_pred, X)
 
@@ -327,19 +255,18 @@ def visualize_dlo_motion(
         learned_rfem_params, add_ee_ref_joint=True, rod_radius_viz=dlo_rod_radius[dlo]
     )
 
-    dt = 0.04
     n_replays = 1
-    # n_window = jnp.array([1])
-    idx_start = 0 # if dlo == 'pool_noodle' else 60 // x_rollout
+    step = 5
+    dt = 0.004 * step
+    idx_start = 0 if dlo == 'pool_noodle' else 60 // x_rollout
     for n_window in range(idx_start, len(X)):
         q_rfem, _ = jnp.hsplit(X[n_window].squeeze(), 2)
         q_p = panda_rlts[n_window]
         q_b, _ = jnp.hsplit(test_data.U_decoder[n_window].squeeze(), 2)
         p_e = test_data.Y[n_window, :, :3]
         q = jnp.hstack((q_p, q_b, q_rfem, p_e))
-        visualize_robot(np.array(q[::10,:]), dt, n_replays, model, cmodel, vmodel, 
+        visualize_robot(np.array(q[::step,:]), dt, n_replays, model, cmodel, vmodel, 
                         video_name=f'{dlo}_{n_window+1}_rollout')
-
 
 
 def how_rfem_regularization_affects_dlo_shape(
@@ -461,30 +388,34 @@ def plot_output_prediction(save_fig: False, x_rollout: int = 10):
 
 def compute_inference_time():
     n_seg = 7
-    dyn_type = 'node'
-    dec_type = 'NN'
-    config_names = [f'{dyn_type}_{n_seg}seg_{dec_type}.yml']
-    configs = get_model_configs(config_names)
-    trained_models = load_trained_model(configs)
+    dlo = 'aluminium_rod'
+    dyn_type = 'resnet'
+    dec_type = 'LFK'
+    config = get_model_configs(dlo, n_seg, dyn_type, dec_type)
+    trained_model = load_trained_model(config)
 
     # Get data
-    train_data = get_data_used_for_training(configs[0])
-    train_rollout_length = configs[0]['rollout_length']
-    test_rollout_length = train_rollout_length
-    n_test_trajs = [17]
-    test_trajs = data_pp.load_trajs(n_test_trajs)
-    test_data = data_pp.construct_test_dataset_from_trajs(
-        test_trajs, test_rollout_length, train_data, 'sliding', scale_outputs=False
+    train_data = get_data_used_for_training(config)
+    config['test_trajs'] = [17]
+    test_data = get_test_data(config, 'sliding', 1)
+    
+    # Compile
+    n_window = 14
+    X, Y = trained_model(
+        test_data.U_encoder[n_window,0,:], 
+        test_data.U_dyn[n_window],
+        test_data.U_decoder[n_window]
     )
 
-    n_window = 14
-    x0 = trained_models[0].encoder(test_data.U_encoder[n_window,0,:])
-    X = trained_models[0].dynamics(x0, test_data.U_rnn[n_window])
-
-    reps = 5000
+    # Measure inference time
+    reps = 15
     start_time = time.time()
     for _ in range(reps):
-        X = trained_models[0].dynamics(x0, test_data.U_rnn[n_window])
+        X, Y = trained_model(
+            test_data.U_encoder[n_window,0,:], 
+            test_data.U_dyn[n_window],
+            test_data.U_decoder[n_window]
+        )
     end_time = time.time()
     execution_time = (end_time - start_time)/reps  # Calculate the execution time
     print(f"Execution time: {execution_time*1000:.3f} ms")
@@ -503,11 +434,58 @@ def evaluate_model_performance_and_save_predictions_for_all_models(x_rollout: in
                 )
 
 
+def custom_model_eval(config: str, pickle_results: bool = False):
+    with open(config, 'r') as file:
+        config = yaml.safe_load(file)
+    
+    trained_model = load_trained_model(config)
+
+    # Load train and val data to get sacalars
+    window = 'sliding'
+    test_data = get_test_data(config, window, x_rollout=1)
+    
+    
+    # Evaluate model
+    X, Y_pred = jax.vmap(trained_model)(
+        test_data.U_encoder[:,0,:], 
+        test_data.U_dyn, 
+        test_data.U_decoder
+    )
+    
+    # Compute performance metrics
+    E = test_data.Y - Y_pred
+    pos_err_l2_norm = nn_utils.l2_norm(E[:,:,:3])
+    vel_err_l2_norm = nn_utils.l2_norm(E[:,:,3:])
+    pos_err_l2_norm_mean = 100*jnp.mean(pos_err_l2_norm).item()
+    vel_err_l2_norm_mean = 100*jnp.mean(vel_err_l2_norm).item()
+    pos_err_l2_norm_std = 100*jnp.std(pos_err_l2_norm).item()
+    vel_err_l2_norm_std = 100*jnp.std(vel_err_l2_norm).item()
+
+    pos_error_mean_l2_norm = nn_utils.mean_l2_norm(E[:,:,:3]).item()
+    vel_error_mean_l2_norm = nn_utils.mean_l2_norm(E[:,:,3:]).item()
+    
+    # model = f'{dynamics}_{decoder}'
+    # print(f"model: {model}")
+    print(f"pos err: {pos_err_l2_norm_mean:.1f} +/- {pos_err_l2_norm_std:.1f} cm")
+    print(f"vel err: {vel_err_l2_norm_mean:.1f} +/- {vel_err_l2_norm_std:.1f} cm/s")
+
+    if pickle_results:
+        results = {
+            'Y_true': test_data.Y,
+            'Y_pred': Y_pred,
+            'X_pred': X
+        }
+        with open(f'{config["name"]}.pkl', 'wb') as f:
+            pickle.dump(results, f)
+
+
 if __name__ == "__main__":
     # evaluate_model_performance_and_save_predictions_for_all_models(x_rollout=20)
-    # evaluate_model_performance_and_save_predictions()
-    # how_nseg_affects_predictions(save_fig=True)
-    visualize_dlo_motion(dlo='aluminium_rod', x_rollout=5)
+    # evaluate_model_performance_and_save_predictions(
+    #     dlo='pool_noodle', n_seg=2, dynamics='rnn', decoder='LFK', x_rollout=1
+    # )
+    # how_nseg_affects_predictions(save_fig=False)
+    # visualize_dlo_motion(dlo='aluminium_rod', x_rollout=1)
 
 
     # plot_hidden_rfem_state_evolution()
@@ -515,4 +493,7 @@ if __name__ == "__main__":
     # visualize_rfem_motion()
     # plot_output_prediction(save_fig=False)
     # how_rfem_regularization_affects_dlo_shape()
-    # compute_inference_time()
+    compute_inference_time()
+
+    # config = 'training/experiment_configs/aluminium_rod/rnn_2seg_LFK_rss.yml'
+    # custom_model_eval(config, pickle_results=True)
