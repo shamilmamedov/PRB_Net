@@ -1,4 +1,4 @@
-# FEIN: finite element inspired networks
+# PRB-Net: pseudo-rigid body network
 
 ## Problem statement
 Our primary focus lies in modeling the highly nonlinear dynamics of deformable linear objects, including cables, ropes, and rods, based on limited observations. An illustrative example showcasing the typical motion patterns we seek to predict is presented below.
@@ -19,13 +19,13 @@ The setup we used in this work to generate the dataset consists of: a 1.92 m lon
 ## Proposed method
 Although purely machine learning (ML) methods can address the problem, they have a number of limitations. First, the latent state is often not interpretable and lacks physical meaning. Second, ML methods only predict the observations—the DLO's end position and velocity—without providing any information about the shape of the DLO. Rough shape reconstruction of the DLO is important for DLO manipulation in an environment with obstacles.
 
-We propose approximating the DLO as a serial chain of rigid bodies connected via passive elastic joints, similar to the approach used in rigid FEM (RFEM). Utilizing the forward kinematics of this serial chain as a decoder makes the latent states to become physically meaningful and represent the generalized coordinates of the serial chain. Furthermore, this decoder enables the reconstruction of the shape of the DLO.
+We propose approximating the DLO as a serial chain of rigid bodies connected via passive elastic joints, similar to the approach used in pseudo-rigid body method. Utilizing the forward kinematics of this serial chain as a decoder makes the latent states to become physically meaningful and represent the generalized coordinates of the serial chain. Furthermore, this decoder enables the reconstruction of the shape of the DLO.
 
 To further enhance the physical consistency of the DLO's shape, we apply regularization to the latent states. From a physical standpoint, this proposed regularization can be interpreted as minimizing kinetic and potential energy.
 
 ![fein](media/FEIN_architecture.png)
 
 ## Running code
-To use the code, you first need to clone the repository and install FEIN by running `pip install -e .`
+To use the code, you first need to clone the repository and install PRB-Net by running `pip install -e .`
 
 To train a model without logging the results into [Weights and Biases](https://wandb.ai/site), execute `python training/run_experiment.py --config {config_file} --wandb_mode disabled`. You can choose one of the config files from the `training/experiment_configs` folder or create your own by following the same template. If you wish to try different encoder, decoder, or latent dynamics models, you will need to implement them and integrate them into the existing training routine in the `training/run_experiment.py` script. Please note that training a Neural ODE may take a significant amount of time.
